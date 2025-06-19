@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
@@ -133,7 +134,7 @@
 
         <!-- Upload Section -->
         <div class="card upload-section" id="upload-section">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">1. Upload Your Data</h2>
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Upload Your Data</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <!-- Comments File (Required) -->
                 <div class="flex flex-col">
@@ -183,18 +184,7 @@
 
         <!-- Interactive Dashboard -->
         <div id="dashboard-content" class="space-y-8 results">
-            <h2 class="text-2xl font-semibold mb-0 text-gray-800">2. Explore the Analysis</h2>
-
-            <!-- Thematic Takeaways -->
-            <div id="takeaways-container" class="bg-white rounded-xl shadow-md border border-gray-200">
-                <button id="toggle-takeaways" class="w-full text-left p-4 font-semibold text-lg text-gray-800 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                    <span><i class="fas fa-lightbulb mr-3 text-yellow-500"></i>Thematic Takeaways</span>
-                    <i id="takeaway-chevron" class="fas fa-chevron-down transition-transform rotate-180"></i>
-                </button>
-                <div id="takeaways-content" class="px-6 pb-6 border-t border-gray-200 prose max-w-none">
-                    <!-- Theme content will be populated dynamically -->
-                </div>
-            </div>
+            <h2 class="text-2xl font-semibold mb-0 text-gray-800">Explore the Analysis</h2>
 
             <!-- Course Section Filter and Details -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -287,6 +277,17 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Executive Summary -->
+            <div id="takeaways-container" class="bg-white rounded-xl shadow-md border border-gray-200">
+                <button id="toggle-takeaways" class="w-full text-left p-4 font-semibold text-lg text-gray-800 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                    <span><i class="fas fa-chart-line mr-3 text-blue-500"></i>Executive Summary</span>
+                    <i id="takeaway-chevron" class="fas fa-chevron-down transition-transform"></i>
+                </button>
+                <div id="takeaways-content" class="px-6 pb-6 border-t border-gray-200 prose max-w-none hidden">
+                    <!-- Executive summary content will be populated dynamically -->
                 </div>
             </div>
 
@@ -457,10 +458,11 @@
                     processedData = {
                         dashboardData: analysisData.dashboardData,
                         markdownReport: analysisData.markdownReport,
+                        executiveSummary: analysisData.executiveSummary,
                         jobId: analysisData.jobId
                     };
                     showLoading(false);
-                    displayDashboard(analysisData.dashboardData, analysisData.markdownReport);
+                    displayDashboard(analysisData.dashboardData, analysisData.executiveSummary || analysisData.markdownReport);
                 } else {
                     throw new Error('No dashboard data generated');
                 }
@@ -549,7 +551,7 @@
             ];
         }
 
-        function displayDashboard(data, report) {
+        function displayDashboard(data, executiveSummary) {
             allComments = data;
             
             // Process and display all components
@@ -557,7 +559,7 @@
             populateSectionFilter(data);
             populateThemeFilters(data);
             displayComments(data);
-            populateThematicTakeaways(report);
+            renderExecutiveSummary(executiveSummary);
             updateCourseDetails();
             updateGradeChart();
             setupInteractivity();
@@ -898,14 +900,20 @@
             filtersContainer.innerHTML = existingButtons + themeButtons;
         }
 
-        function populateThematicTakeaways(report) {
+        function renderExecutiveSummary(executiveSummary) {
             const takeawaysContent = document.getElementById('takeaways-content');
             
-            if (typeof report === 'string' && report.trim()) {
-                // If we have a markdown report, display it
-                takeawaysContent.innerHTML = `<div class="markdown-content">${report.replace(/\n/g, '<br>')}</div>`;
+            if (typeof executiveSummary === 'string' && executiveSummary.trim()) {
+                // Use marked.js to parse the markdown executive summary
+                try {
+                    const htmlContent = marked.parse(executiveSummary);
+                    takeawaysContent.innerHTML = `<div class="executive-summary-content">${htmlContent}</div>`;
+                } catch (error) {
+                    console.warn('Markdown parsing failed, using plain text:', error);
+                    takeawaysContent.innerHTML = `<div class="executive-summary-content">${executiveSummary.replace(/\n/g, '<br>')}</div>`;
+                }
             } else {
-                // Fallback to theme-based takeaways
+                // Fallback to theme-based takeaways if no executive summary is available
                 const themeGroups = allComments.reduce((acc, comment) => {
                     const theme = comment.Theme;
                     if (theme && theme !== 'Unmapped') {
@@ -922,14 +930,18 @@
                     return acc;
                 }, {});
 
-                takeawaysContent.innerHTML = Object.entries(themeGroups).map(([theme, info]) => `
-                    <h3>${theme}</h3>
-                    <p>${info.description}</p>
-                    <ul>
-                        ${Array.from(info.codes).slice(0, 5).map(code => `<li>${code}</li>`).join('')}
-                        ${info.codes.size > 5 ? `<li><em>...and ${info.codes.size - 5} more codes</em></li>` : ''}
-                    </ul>
-                `).join('');
+                takeawaysContent.innerHTML = `
+                    <h3>Thematic Analysis Summary</h3>
+                    <p><em>Executive summary generation is unavailable. Here's a thematic breakdown:</em></p>
+                    ${Object.entries(themeGroups).map(([theme, info]) => `
+                        <h4>${theme}</h4>
+                        <p>${info.description}</p>
+                        <ul>
+                            ${Array.from(info.codes).slice(0, 5).map(code => `<li>${code}</li>`).join('')}
+                            ${info.codes.size > 5 ? `<li><em>...and ${info.codes.size - 5} more codes</em></li>` : ''}
+                        </ul>
+                    `).join('')}
+                `;
             }
         }
 

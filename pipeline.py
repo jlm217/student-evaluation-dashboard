@@ -6,6 +6,7 @@ This script provides a complete workflow for qualitative data analysis using Dat
 - Phase 0: Data Formatting & Cleaning
 - Phase 1: Initial Coding with AI  
 - Phase 2: Thematic Analysis & Report Generation
+- Phase 4: Executive Summary Generation
 
 Author: Qualitative Coding Agent
 """
@@ -15,6 +16,8 @@ import numpy as np
 from typing import Dict, Any, Optional
 import os
 import sys
+import json
+import google.generativeai as genai
 
 # Import our refactored modules
 from formatter import format_data
@@ -277,6 +280,60 @@ def clean_for_json_serialization(df: pd.DataFrame) -> pd.DataFrame:
     return clean_df
 
 
+def generate_executive_summary(final_df: pd.DataFrame) -> str:
+    """
+    Generate an executive summary based on the final merged dataset.
+    
+    Args:
+        final_df (pd.DataFrame): Final merged DataFrame with all analysis data
+        
+    Returns:
+        str: Executive summary as markdown text
+    """
+    try:
+        print("\n📝 PHASE 4: EXECUTIVE SUMMARY GENERATION")
+        print("-" * 50)
+        
+        # Convert DataFrame to JSON for the prompt
+        data_json = final_df.to_json(orient='records', indent=2)
+        
+        # Create the executive summary prompt
+        executive_summary_prompt = f"""Role: You are an expert educational data analyst and strategist. Your task is to write a concise executive summary based on a comprehensive dataset of student feedback, course details, and grade distributions. The audience for this report is a university department head who needs to quickly understand the key findings and make data-driven decisions.
+
+Task: Analyze the provided JSON data and generate a structured report. The report should identify high-level trends, compare different course sections or modalities, highlight what is working well, and pinpoint areas for improvement.
+
+Instructions:
+1. Analyze Holistically: Review the entire dataset to understand the relationships between qualitative feedback (comments, themes, sentiment) and quantitative data (grades, enrollment, modality).
+2. Structure Your Report: Generate the report in markdown format with the following sections:
+    * ### Overall Summary: A brief, top-level paragraph summarizing the most significant findings from the data.
+    * ### Key Strengths: Identify 2-3 aspects that are working well. Use positive-sentiment themes and specific examples as evidence. Mention if these strengths are consistent across all sections or concentrated in specific ones.
+    * ### Areas for Improvement: Identify the 2-3 most critical areas needing attention. Use negative-sentiment themes and grade data (e.g., high DEW rates) as evidence. Quote specific, illustrative comments to support your points.
+    * ### Patterns and Comparisons: Highlight any interesting patterns. For example:
+        * Does one instructor consistently receive more positive feedback on a specific theme?
+        * Is there a difference in feedback between "Online" and "In-Person" modalities?
+        * Is there a correlation between high DEW (Drop/Fail/Withdraw) rates and negative course evaluations?
+        * Does student feedback differ by course modality suggesting a preference or perceived effectiveness of one mode over another?
+        * Does student feedback vary by session length (Session A/B vs. Session C), indicating a preference for 7.5-week vs. 16-week formats?
+    * ### Actionable Recommendations: Based on your analysis, suggest 1-2 concrete, actionable steps or areas for future investigation. These should be based in the students comments as evidence.
+
+Data for Analysis:
+You will be provided with a JSON object representing the final, merged dataset. Here is the data:
+{data_json}"""
+
+        # Call Gemini API to generate the executive summary
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(executive_summary_prompt)
+        
+        executive_summary = response.text.strip()
+        
+        print(f"✅ Executive summary generated ({len(executive_summary)} characters)")
+        return executive_summary
+        
+    except Exception as e:
+        print(f"Warning: Failed to generate executive summary: {e}")
+        return "## Executive Summary\n\nExecutive summary generation is currently unavailable. Please refer to the thematic analysis above for key insights."
+
+
 def run_pipeline(
     comments_file_path: str,
     schedule_file_path: Optional[str] = None,
@@ -295,7 +352,7 @@ def run_pipeline(
         answer_col (str): Name of answer column
 
     Returns:
-        Dict[str, Any]: Dictionary containing the final DataFrame and the markdown report
+        Dict[str, Any]: Dictionary containing the final DataFrame, markdown report, and executive summary
     """
     print("🚀 Starting robust in-memory pipeline...")
 
@@ -371,6 +428,9 @@ def run_pipeline(
     # Clean up final data for JSON serialization
     final_df = clean_for_json_serialization(final_df)
 
+    # Phase 4: Generate Executive Summary
+    executive_summary = generate_executive_summary(final_df)
+
     print("\n🎉 Pipeline finished successfully!")
     print(f"Final dataset: {len(final_df)} rows, {len(final_df.columns)} columns")
     
@@ -382,6 +442,7 @@ def run_pipeline(
     return {
         "final_dataframe": final_df,
         "markdown_report": markdown_report,
+        "executive_summary": executive_summary,
         "validation_results": validation_results
     }
 

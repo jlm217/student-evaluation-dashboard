@@ -170,6 +170,7 @@ async def process_files_endpoint(
 
             final_df = results["final_dataframe"]
             markdown_report = results["markdown_report"]
+            executive_summary = results.get("executive_summary", "")
             validation_results = results.get("validation_results", [])
             
             print(f"Pipeline completed. Final DataFrame shape: {final_df.shape}")
@@ -202,6 +203,7 @@ async def process_files_endpoint(
                 "jobId": job_id,
                 "dashboardData": dashboard_json,
                 "markdownReport": markdown_report,
+                "executiveSummary": executive_summary,
                 "validationResults": validation_results,
                 "metadata": {
                     "totalRows": len(final_df),
@@ -383,6 +385,7 @@ async def process_multiple_files_legacy(request: dict):
         
         final_df = results["final_dataframe"]
         markdown_report = results["markdown_report"]
+        executive_summary = results.get("executive_summary", "")
         
         # Convert to the legacy format expected by the frontend
         themed_data = final_df.to_dict(orient='records')
@@ -402,6 +405,7 @@ async def process_multiple_files_legacy(request: dict):
             "themed_data": themed_data,
             "themes": themes,
             "summary": markdown_report,
+            "executive_summary": executive_summary,
             "has_schedule": schedule_file_path is not None,
             "has_grades": grades_file_path is not None,
             "coded_file": None,  # Not used in new architecture
