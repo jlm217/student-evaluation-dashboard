@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qualitative Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .theme-button.active {
+            background-color: #4f46e5;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .prose h3 {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+        .prose p {
+            margin-bottom: 0.5em;
+        }
+        .prose ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin-bottom: 1em;
+        }
+        .comment-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .comment-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        .spinner {
+            border: 2px solid #e2e8f0;
+            border-top: 2px solid #4f46e5;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .results {
+            display: none;
+        }
+        .upload-section {
+            display: block;
+        }
+        .btn {
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-right: 12px;
+            transition: all 0.2s ease;
+        }
+        .btn-primary {
+            background-color: #4f46e5;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: #7c3aed;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #6d28d9;
+            transform: translateY(-1px);
+        }
+        .btn:disabled {
+            background-color: #d1d5db;
+            color: #6b7280;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+        .file-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            margin: 8px 0;
+        }
+        .success {
+            color: #059669;
+            font-size: 0.875rem;
+            margin-top: 4px;
+        }
+        .error {
+            color: #dc2626;
+            font-size: 0.875rem;
+            margin-top: 4px;
+        }
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 32px;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+    <div class="container mx-auto p-4 md:p-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Qualitative Analysis Dashboard</h1>
+            <p class="text-lg text-gray-600 mt-1">Upload course data to analyze student feedback and performance.</p>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="card upload-section" id="upload-section">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">1. Upload Your Data</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Comments File (Required) -->
+                <div class="flex flex-col">
+                    <label for="comments-file" class="font-medium text-gray-700 mb-2">
+                        <i class="fas fa-comments mr-2 text-indigo-500"></i>Student Comments File *
+                    </label>
+                    <input type="file" id="comments-file" accept=".csv" class="file-input" required>
+                    <div id="comments-status" class="text-sm"></div>
+                    <p class="text-xs text-gray-500 mt-1">Required: CSV with question/response columns</p>
+                </div>
+                <!-- Schedule File (Optional) -->
+                <div class="flex flex-col">
+                    <label for="schedule-file" class="font-medium text-gray-700 mb-2">
+                        <i class="fas fa-calendar-alt mr-2 text-green-500"></i>Course Schedule File
+                    </label>
+                    <input type="file" id="schedule-file" accept=".csv" class="file-input">
+                    <div id="schedule-status" class="text-sm"></div>
+                    <p class="text-xs text-gray-500 mt-1">Optional: Course section details</p>
+                </div>
+                <!-- Grades File (Optional) -->
+                <div class="flex flex-col">
+                    <label for="grades-file" class="font-medium text-gray-700 mb-2">
+                        <i class="fas fa-graduation-cap mr-2 text-amber-500"></i>Grades & Enrollment File
+                    </label>
+                    <input type="file" id="grades-file" accept=".csv" class="file-input">
+                    <div id="grades-status" class="text-sm"></div>
+                    <p class="text-xs text-gray-500 mt-1">Optional: Grade distribution data</p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-4">
+                <button class="btn btn-secondary" onclick="tryDemo()">
+                    <i class="fas fa-play mr-2"></i>Try Demo
+                </button>
+                <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeFiles()" disabled>
+                    <i class="fas fa-cogs mr-2"></i>Analyze & Build Dashboard
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Section -->
+        <div class="card loading" id="loading">
+            <div class="spinner"></div>
+            <span style="font-size: 1.1rem; color: #374151;">Processing your data...</span>
+            <p class="text-sm text-gray-600 mt-2">This may take a few minutes depending on the size of your data.</p>
+        </div>
+
+        <!-- Interactive Dashboard -->
+        <div id="dashboard-content" class="space-y-8 results">
+            <h2 class="text-2xl font-semibold mb-0 text-gray-800">2. Explore the Analysis</h2>
+
+            <!-- Thematic Takeaways -->
+            <div id="takeaways-container" class="bg-white rounded-xl shadow-md border border-gray-200">
+                <button id="toggle-takeaways" class="w-full text-left p-4 font-semibold text-lg text-gray-800 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                    <span><i class="fas fa-lightbulb mr-3 text-yellow-500"></i>Thematic Takeaways</span>
+                    <i id="takeaway-chevron" class="fas fa-chevron-down transition-transform rotate-180"></i>
+                </button>
+                <div id="takeaways-content" class="px-6 pb-6 border-t border-gray-200 prose max-w-none">
+                    <!-- Theme content will be populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Course Section Filter and Details -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Course Section Filter -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                        <h3 class="font-bold text-xl mb-4 text-gray-900">
+                            <i class="fas fa-filter mr-2 text-blue-500"></i>Course Section Filter
+                        </h3>
+                        <select id="section-filter" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="all">All Sections</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Course Details Card -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                        <h3 class="font-bold text-xl mb-4 text-gray-900">
+                            <i class="fas fa-info-circle mr-2 text-indigo-500"></i>Course Details
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm" id="course-details">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-indigo-600" id="detail-instructor">-</div>
+                                <div class="text-gray-600">Instructor</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-green-600" id="detail-modality">-</div>
+                                <div class="text-gray-600">Modality</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-purple-600" id="detail-term">-</div>
+                                <div class="text-gray-600">Term</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-orange-600" id="detail-enrollment">-</div>
+                                <div class="text-gray-600">Enrollment</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Summary and Grade Distribution -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Analysis Summary -->
+                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                    <h3 class="font-bold text-xl mb-4 text-gray-900">
+                        <i class="fas fa-chart-bar mr-2 text-blue-500"></i>Analysis Summary
+                    </h3>
+                    <div class="space-y-3 text-gray-700" id="analysis-summary">
+                        <div class="flex justify-between"><span><i class="fas fa-comments mr-3 text-gray-400"></i>Total Comments:</span> <span class="font-semibold" id="total-comments">-</span></div>
+                        <div class="flex justify-between"><span><i class="fas fa-tags mr-3 text-gray-400"></i>Themes Found:</span> <span class="font-semibold" id="total-themes">-</span></div>
+                        <div class="flex justify-between"><span><i class="fas fa-graduation-cap mr-3 text-gray-400"></i>Courses:</span> <span class="font-semibold" id="total-courses">-</span></div>
+                        <div class="flex justify-between"><span><i class="fas fa-users mr-3 text-gray-400"></i>Sections:</span> <span class="font-semibold" id="total-sections">-</span></div>
+                    </div>
+                </div>
+
+                <!-- Grade Distribution Chart -->
+                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                    <h3 class="font-bold text-xl mb-4 text-gray-900">
+                        <i class="fas fa-chart-line mr-2 text-green-500"></i>Grade Distribution
+                    </h3>
+                    <div class="h-48 flex items-center justify-center">
+                        <canvas id="gradeChart" class="max-w-full max-h-full"></canvas>
+                        <div id="no-grade-data" class="text-gray-500 text-center hidden">
+                            <i class="fas fa-info-circle text-2xl mb-2"></i>
+                            <p>No grade data available</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Student Feedback Module -->
+            <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h3 class="font-bold text-xl text-gray-900">
+                        <i class="fas fa-comments mr-2 text-blue-500"></i>Student Feedback
+                    </h3>
+                    <button class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors text-sm" onclick="downloadThemedCSV()">
+                        <i class="fas fa-download mr-2"></i>Download Themed CSV
+                    </button>
+                </div>
+                
+                <!-- Keyword Search -->
+                <div class="mb-6">
+                    <div class="relative">
+                        <input type="text" id="searchInput" placeholder="Search comments by keyword..." class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                        <i class="fas fa-search absolute left-3 top-4 text-gray-400"></i>
+                    </div>
+                </div>
+
+                <!-- Theme Filters -->
+                <div class="mb-6">
+                    <h4 class="font-semibold text-gray-700 mb-3">Filter by Theme:</h4>
+                    <div class="flex flex-wrap gap-2" id="theme-filters">
+                        <button class="theme-button active px-4 py-2 rounded-full font-semibold text-sm transition bg-gray-100 text-gray-700 hover:bg-gray-200" onclick="filterByTheme('all')">All Themes</button>
+                        <!-- Theme buttons will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Comments Display -->
+                <div class="max-h-[60vh] overflow-y-auto space-y-4 pr-2" id="comments-container">
+                    <!-- Comments will be populated dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let selectedFiles = {
+            comments: null,
+            schedule: null,
+            grades: null
+        };
+        let allComments = [];
+        let allThemes = [];
+        let currentFilter = 'all';
+        let currentSearch = '';
+        let currentSection = 'all';
+        let processedData = null;
+        let currentJobId = null;
+        let gradeChart = null;
+
+        // File input handlers
+        document.getElementById('comments-file').addEventListener('change', function(e) {
+            selectedFiles.comments = e.target.files[0];
+            updateFileStatus('comments', selectedFiles.comments);
+            updateAnalyzeButton();
+        });
+
+        document.getElementById('schedule-file').addEventListener('change', function(e) {
+            selectedFiles.schedule = e.target.files[0];
+            updateFileStatus('schedule', selectedFiles.schedule);
+        });
+
+        document.getElementById('grades-file').addEventListener('change', function(e) {
+            selectedFiles.grades = e.target.files[0];
+            updateFileStatus('grades', selectedFiles.grades);
+        });
+
+        // Section filter handler
+        document.getElementById('section-filter').addEventListener('change', function(e) {
+            currentSection = e.target.value;
+            updateCourseDetails();
+            updateGradeChart();
+            filterComments();
+        });
+
+        function updateFileStatus(fileType, file) {
+            const statusElement = document.getElementById(`${fileType}-status`);
+            if (file) {
+                statusElement.innerHTML = `<div class="success">✓ ${file.name}</div>`;
+            } else {
+                statusElement.innerHTML = '';
+            }
+        }
+
+        function updateAnalyzeButton() {
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            // Only comments file is required
+            analyzeBtn.disabled = !selectedFiles.comments;
+        }
+
+        // Search functionality with real-time filtering
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            currentSearch = e.target.value.toLowerCase();
+            filterComments();
+        });
+
+        // Demo function with improved loading state
+        async function tryDemo() {
+            showLoading(true);
+            
+            try {
+                const response = await fetch('/CommentsRAW_SAMPLE_cleaned_coded_themed.csv');
+                const csvText = await response.text();
+                const demoData = parseCSV(csvText);
+                
+                setTimeout(() => {
+                    showLoading(false);
+                    displayDashboard(demoData, "Demo Data Analysis");
+                }, 2000);
+            } catch (error) {
+                console.error('Demo error:', error);
+                // Fallback demo data
+                setTimeout(() => {
+                    showLoading(false);
+                    displayDashboard(generateMockData(), "Demo Data Analysis");
+                }, 2000);
+            }
+        }
+
+        // Main analyze function using /api/v2/analyze endpoint as per PRD
+        async function analyzeFiles() {
+            if (!selectedFiles.comments) {
+                alert('Please select a Student Comments file first (required).');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const formData = new FormData();
+                formData.append('comments_file', selectedFiles.comments);
+                
+                if (selectedFiles.schedule) {
+                    formData.append('schedule_file', selectedFiles.schedule);
+                }
+                
+                if (selectedFiles.grades) {
+                    formData.append('grades_file', selectedFiles.grades);
+                }
+
+                const response = await fetch('/api/v2/analyze', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Analysis failed: ${response.statusText}`);
+                }
+
+                const analysisData = await response.json();
+                console.log('Analysis complete:', analysisData);
+
+                // Store the job ID for downloading
+                currentJobId = analysisData.jobId;
+
+                // Check for validation warnings and display them
+                if (analysisData.validationResults) {
+                    displayValidationAlerts(analysisData.validationResults);
+                }
+
+                // Use the dashboard data directly from the API response
+                if (analysisData.dashboardData && analysisData.dashboardData.length > 0) {
+                    processedData = {
+                        dashboardData: analysisData.dashboardData,
+                        markdownReport: analysisData.markdownReport,
+                        jobId: analysisData.jobId
+                    };
+                    showLoading(false);
+                    displayDashboard(analysisData.dashboardData, analysisData.markdownReport);
+                } else {
+                    throw new Error('No dashboard data generated');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                showLoading(false);
+                alert(`Error analyzing files: ${error.message}. Please try again.`);
+            }
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
+            
+            return lines.slice(1).map(line => {
+                const values = [];
+                let current = '';
+                let inQuotes = false;
+                
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                values.push(current.trim());
+                
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header] = values[index] || '';
+                });
+                return obj;
+            });
+        }
+
+        function generateMockData() {
+            return [
+                {
+                    question: "What did you like the least about the course?",
+                    response: "The workload was too much for a 100-level class and the professor was unresponsive.",
+                    Initial_Code: "Excessive workload/poor professor",
+                    Sentiment: "Negative",
+                    Theme: "Course Workload and Difficulty",
+                    crs_number: "AST 111",
+                    SectionNumber_ASU: "12345",
+                    Instructor: "Dr. Smith",
+                    Modality: "Online",
+                    Term: "Fall 2024",
+                    Enrollment: "150",
+                    Grade: "B"
+                },
+                {
+                    question: "What did you like the most about the course?",
+                    response: "I liked that it was organized. I really appreciated the fact that the grades were submitted immediately too.",
+                    Initial_Code: "Organization and grading",
+                    Sentiment: "Positive", 
+                    Theme: "Course Structure and Organization",
+                    crs_number: "AST 111",
+                    SectionNumber_ASU: "12345",
+                    Instructor: "Dr. Smith",
+                    Modality: "Online",
+                    Term: "Fall 2024",
+                    Enrollment: "150",
+                    Grade: "A"
+                },
+                {
+                    question: "What do you think are the greatest strengths of this TA?",
+                    response: "The TA was very responsive and helpful with questions.",
+                    Initial_Code: "Responsive and helpful TA",
+                    Sentiment: "Positive",
+                    Theme: "Teaching Assistant (TA) Performance and Support",
+                    crs_number: "AST 112",
+                    SectionNumber_ASU: "12346",
+                    Instructor: "Dr. Jones",
+                    Modality: "In-Person",
+                    Term: "Fall 2024",
+                    Enrollment: "75",
+                    Grade: "A"
+                }
+            ];
+        }
+
+        function displayDashboard(data, report) {
+            allComments = data;
+            
+            // Process and display all components
+            processStats(data);
+            populateSectionFilter(data);
+            populateThemeFilters(data);
+            displayComments(data);
+            populateThematicTakeaways(report);
+            updateCourseDetails();
+            updateGradeChart();
+            setupInteractivity();
+            
+            // Hide upload section and show dashboard
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('dashboard-content').style.display = 'block';
+        }
+
+        function populateSectionFilter(data) {
+            const sections = [...new Set(data.map(d => d.SectionNumber_ASU).filter(s => s))];
+            const sectionFilter = document.getElementById('section-filter');
+            
+            // Clear existing options except "All Sections"
+            sectionFilter.innerHTML = '<option value="all">All Sections</option>';
+            
+            // Add section options
+            sections.forEach(section => {
+                const option = document.createElement('option');
+                option.value = section;
+                option.textContent = `Section ${section}`;
+                sectionFilter.appendChild(option);
+            });
+        }
+
+        function updateCourseDetails() {
+            let data = allComments;
+            
+            // Filter by selected section if not "all" with type conversion
+            if (currentSection !== 'all') {
+                data = data.filter(d => {
+                    const commentSection = String(d.SectionNumber_ASU);
+                    const selectedSection = String(currentSection);
+                    return commentSection === selectedSection;
+                });
+            }
+            
+            if (data.length === 0) {
+                document.getElementById('detail-instructor').textContent = '-';
+                document.getElementById('detail-modality').textContent = '-';
+                document.getElementById('detail-term').textContent = '-';
+                document.getElementById('detail-enrollment').textContent = '-';
+                return;
+            }
+            
+            // Get details from first record (assuming consistency within section)
+            const sample = data[0];
+            
+            // Map to correct column names from merged data
+            const instructor = sample['Instructor(s)'] || sample['Primary Instructor'] || sample.Instructor || '-';
+            const modality = sample['Instruction Mode'] || sample.Location || sample.Modality || '-';
+            const term = sample['Term/Session'] || sample.Dates || sample.Term || '-';
+            const enrollment = sample['Total Enrollment'] || sample.Enrollment || '-';
+            
+            document.getElementById('detail-instructor').textContent = instructor;
+            document.getElementById('detail-modality').textContent = modality;
+            document.getElementById('detail-term').textContent = term;
+            document.getElementById('detail-enrollment').textContent = enrollment;
+        }
+
+        function updateGradeChart() {
+            let data = allComments;
+            
+            // Filter by selected section if not "all" with type conversion
+            if (currentSection !== 'all') {
+                data = data.filter(d => {
+                    const commentSection = String(d.SectionNumber_ASU);
+                    const selectedSection = String(currentSection);
+                    return commentSection === selectedSection;
+                });
+            }
+            
+            // Check if grade data exists - look for individual grade columns
+            const gradesExist = data.some(d => d.A || d.B || d.C || d.D || d.E || d.W);
+            
+            if (!gradesExist) {
+                document.getElementById('gradeChart').style.display = 'none';
+                document.getElementById('no-grade-data').classList.remove('hidden');
+                return;
+            }
+            
+            document.getElementById('gradeChart').style.display = 'block';
+            document.getElementById('no-grade-data').classList.add('hidden');
+            
+            // Count grades from individual columns (A, B, C, D, E, W from grades file)
+            const gradeCounts = {
+                A: 0, B: 0, C: 0, D: 0, E: 0, W: 0
+            };
+            
+            if (currentSection === 'all') {
+                // When showing all sections, aggregate across unique sections to avoid double counting
+                const uniqueSections = [...new Set(data.map(d => d.SectionNumber_ASU))];
+                uniqueSections.forEach(section => {
+                    const sectionData = data.filter(d => String(d.SectionNumber_ASU) === String(section))[0];
+                    if (sectionData) {
+                        gradeCounts.A += parseInt(sectionData.A) || 0;
+                        gradeCounts.B += parseInt(sectionData.B) || 0;
+                        gradeCounts.C += parseInt(sectionData.C) || 0;
+                        gradeCounts.D += parseInt(sectionData.D) || 0;
+                        gradeCounts.E += parseInt(sectionData.E) || 0;
+                        gradeCounts.W += parseInt(sectionData.W) || 0;
+                    }
+                });
+            } else {
+                // When filtering by specific section, just use that section's data
+                const sectionData = data[0]; // data is already filtered by section
+                if (sectionData) {
+                    gradeCounts.A = parseInt(sectionData.A) || 0;
+                    gradeCounts.B = parseInt(sectionData.B) || 0;
+                    gradeCounts.C = parseInt(sectionData.C) || 0;
+                    gradeCounts.D = parseInt(sectionData.D) || 0;
+                    gradeCounts.E = parseInt(sectionData.E) || 0;
+                    gradeCounts.W = parseInt(sectionData.W) || 0;
+                }
+            }
+            
+            // Destroy existing chart if it exists
+            if (gradeChart) {
+                gradeChart.destroy();
+            }
+            
+            // Create new chart
+            const ctx = document.getElementById('gradeChart').getContext('2d');
+            gradeChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['A', 'B', 'C', 'D', 'E', 'W'],
+                    datasets: [{
+                        label: 'Number of Students',
+                        data: ['A', 'B', 'C', 'D', 'E', 'W'].map(grade => gradeCounts[grade] || 0),
+                        backgroundColor: [
+                            '#10b981', '#3b82f6', '#f59e0b', '#f97316', '#ef4444', '#6b7280'
+                        ],
+                        borderColor: [
+                            '#059669', '#2563eb', '#d97706', '#ea580c', '#dc2626', '#4b5563'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function processStats(data) {
+            const themes = [...new Set(data.map(d => d.Theme).filter(t => t && t !== 'Unmapped'))];
+            const courses = [...new Set(data.map(d => d.crs_number).filter(c => c))];
+            const sections = [...new Set(data.map(d => d.SectionNumber_ASU).filter(s => s))];
+
+            document.getElementById('total-comments').textContent = data.length;
+            document.getElementById('total-themes').textContent = themes.length;
+            document.getElementById('total-courses').textContent = courses.length;
+            document.getElementById('total-sections').textContent = sections.length;
+        }
+
+        function populateThemeFilters(data) {
+            const themes = [...new Set(data.map(d => d.Theme).filter(t => t && t !== 'Unmapped'))];
+            allThemes = themes;
+            
+            const filtersContainer = document.getElementById('theme-filters');
+            // Keep the "All Themes" button and add theme buttons
+            const existingButtons = filtersContainer.innerHTML;
+            const themeButtons = themes.map(theme => 
+                `<button class="theme-button px-4 py-2 rounded-full font-semibold text-sm transition bg-gray-100 text-gray-700 hover:bg-gray-200" onclick="filterByTheme('${theme}')">${theme}</button>`
+            ).join('');
+            
+            filtersContainer.innerHTML = existingButtons + themeButtons;
+        }
+
+        function populateThematicTakeaways(report) {
+            const takeawaysContent = document.getElementById('takeaways-content');
+            
+            if (typeof report === 'string' && report.trim()) {
+                // If we have a markdown report, display it
+                takeawaysContent.innerHTML = `<div class="markdown-content">${report.replace(/\n/g, '<br>')}</div>`;
+            } else {
+                // Fallback to theme-based takeaways
+                const themeGroups = allComments.reduce((acc, comment) => {
+                    const theme = comment.Theme;
+                    if (theme && theme !== 'Unmapped') {
+                        if (!acc[theme]) {
+                            acc[theme] = {
+                                codes: new Set(),
+                                description: getThemeDescription(theme)
+                            };
+                        }
+                        if (comment.Initial_Code) {
+                            acc[theme].codes.add(comment.Initial_Code);
+                        }
+                    }
+                    return acc;
+                }, {});
+
+                takeawaysContent.innerHTML = Object.entries(themeGroups).map(([theme, info]) => `
+                    <h3>${theme}</h3>
+                    <p>${info.description}</p>
+                    <ul>
+                        ${Array.from(info.codes).slice(0, 5).map(code => `<li>${code}</li>`).join('')}
+                        ${info.codes.size > 5 ? `<li><em>...and ${info.codes.size - 5} more codes</em></li>` : ''}
+                    </ul>
+                `).join('');
+            }
+        }
+
+        function getThemeDescription(theme) {
+            const descriptions = {
+                "Instructor Performance and Engagement": "Concerns the students' perception of the instructor's involvement, accessibility, and feedback quality.",
+                "Course Workload and Difficulty": "Feedback related to the amount and difficulty of coursework assignments.",
+                "Course Content and Materials": "Student opinions on the quality and relevance of course materials and content.",
+                "Lab Experiences": "Specific feedback about laboratory components and activities.",
+                "Course Structure and Organization": "Comments about how the course is organized and structured.",
+                "Teaching Assistant (TA) Performance and Support": "Feedback regarding teaching assistants' effectiveness and support.",
+                "Online Platforms and Tools": "Issues and feedback about online learning platforms and tools used.",
+                "Overall Course Enjoyment and Effectiveness": "General sentiments about the overall course experience.",
+                "Student Peer Interactions": "Comments about interactions with other students in the course."
+            };
+            return descriptions[theme] || "Student feedback related to this aspect of the course.";
+        }
+
+        function displayComments(comments) {
+            const container = document.getElementById('comments-container');
+            
+            if (comments.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-8">No comments match your current filters.</p>';
+                return;
+            }
+            
+            container.innerHTML = comments.map(comment => `
+                <div class="comment-card border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <p class="font-semibold text-gray-600 mb-2">${comment.question || 'Question not available'}</p>
+                    <p class="text-gray-800 italic mb-3">"${comment.response || 'Response not available'}"</p>
+                    <div class="flex flex-wrap items-center gap-2 text-xs font-medium">
+                        <span class="px-2 py-1 rounded-full ${getSentimentStyle(comment.Sentiment)}">
+                            <i class="fas ${getSentimentIcon(comment.Sentiment)} mr-1"></i>${comment.Sentiment || 'Neutral'}
+                        </span>
+                        ${comment.Theme && comment.Theme !== 'Unmapped' ? `<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">${comment.Theme}</span>` : ''}
+                        ${comment.Initial_Code ? `<span class="bg-purple-100 text-purple-800 px-2 py-1 rounded-full">${comment.Initial_Code}</span>` : ''}
+                        ${comment.crs_number ? `<span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full">${comment.crs_number}</span>` : ''}
+                        ${comment.SectionNumber_ASU ? `<span class="bg-green-100 text-green-800 px-2 py-1 rounded-full">Section ${comment.SectionNumber_ASU}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getSentimentStyle(sentiment) {
+            switch(sentiment) {
+                case 'Positive': return 'bg-green-100 text-green-800';
+                case 'Negative': return 'bg-red-100 text-red-800';
+                default: return 'bg-gray-100 text-gray-800';
+            }
+        }
+
+        function getSentimentIcon(sentiment) {
+            switch(sentiment) {
+                case 'Positive': return 'fa-thumbs-up';
+                case 'Negative': return 'fa-thumbs-down';
+                default: return 'fa-minus';
+            }
+        }
+
+        function filterByTheme(theme) {
+            currentFilter = theme;
+            
+            // Update button states
+            document.querySelectorAll('.theme-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            filterComments();
+        }
+
+        function filterComments() {
+            let filtered = allComments;
+            
+            // Apply section filter with type conversion
+            if (currentSection !== 'all') {
+                filtered = filtered.filter(comment => {
+                    // Convert both to strings for comparison to handle type mismatches
+                    const commentSection = String(comment.SectionNumber_ASU);
+                    const selectedSection = String(currentSection);
+                    return commentSection === selectedSection;
+                });
+            }
+            
+            // Apply theme filter
+            if (currentFilter !== 'all') {
+                filtered = filtered.filter(comment => comment.Theme === currentFilter);
+            }
+            
+            // Apply search filter
+            if (currentSearch) {
+                filtered = filtered.filter(comment => 
+                    (comment.response && comment.response.toLowerCase().includes(currentSearch)) ||
+                    (comment.question && comment.question.toLowerCase().includes(currentSearch)) ||
+                    (comment.Theme && comment.Theme.toLowerCase().includes(currentSearch)) ||
+                    (comment.Initial_Code && comment.Initial_Code.toLowerCase().includes(currentSearch))
+                );
+            }
+            
+            displayComments(filtered);
+        }
+
+        function setupInteractivity() {
+            // Thematic takeaways toggle
+            const toggleButton = document.getElementById('toggle-takeaways');
+            const takeawaysContent = document.getElementById('takeaways-content');
+            const chevron = document.getElementById('takeaway-chevron');
+
+            toggleButton.addEventListener('click', () => {
+                const isHidden = takeawaysContent.classList.contains('hidden');
+                if (isHidden) {
+                    takeawaysContent.classList.remove('hidden');
+                    chevron.classList.add('rotate-180');
+                } else {
+                    takeawaysContent.classList.add('hidden');
+                    chevron.classList.remove('rotate-180');
+                }
+            });
+        }
+
+        async function downloadThemedCSV() {
+            if (!currentJobId) {
+                alert('No analysis data available to download.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/v2/download/${currentJobId}`);
+                
+                if (!response.ok) {
+                    throw new Error('Download failed');
+                }
+                
+                // Get the filename from the Content-Disposition header
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'themed_analysis.csv';
+                if (contentDisposition) {
+                    const matches = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                
+                // Create blob and download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+            } catch (error) {
+                console.error('Download error:', error);
+                alert('Error downloading file. Please try again.');
+            }
+        }
+
+        function displayValidationAlerts(validationResults) {
+            // Clear any existing alerts
+            const existingAlerts = document.querySelectorAll('.validation-alert');
+            existingAlerts.forEach(alert => alert.remove());
+
+            validationResults.forEach(result => {
+                if (result.result.status === 'warning' && result.result.type === 'time_period_mismatch') {
+                    displayTimePeroidMismatchAlert(result.file_type, result.result);
+                } else if (result.result.status === 'error') {
+                    displayErrorAlert(result.file_type, result.result);
+                }
+            });
+        }
+
+        function displayTimePeroidMismatchAlert(fileType, result) {
+            const alertHTML = `
+                <div class="validation-alert bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800">
+                                Data Time Period Mismatch - ${fileType.charAt(0).toUpperCase() + fileType.slice(1)} File
+                            </h3>
+                            <div class="mt-2 text-sm text-yellow-700">
+                                <p>${result.message}</p>
+                                <div class="mt-2">
+                                    <p><strong>Details:</strong></p>
+                                    <ul class="list-disc list-inside ml-4">
+                                        <li>Comments sections: ${result.details.comments_sections}</li>
+                                        <li>${fileType} sections: ${result.details[fileType === 'schedule' ? 'schedule_sections' : 'grades_sections']}</li>
+                                        <li>Overlapping sections: ${result.details.overlapping_sections}</li>
+                                        <li>Overlap percentage: ${result.details.overlap_percentage.toFixed(1)}%</li>
+                                    </ul>
+                                </div>
+                                <div class="mt-3 p-3 bg-yellow-100 rounded">
+                                    <p class="text-sm font-medium text-yellow-800">
+                                        ⚠️ Recommendation: Please verify that all uploaded files are from the same academic term/year.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Insert alert at the top of the dashboard
+            const dashboard = document.getElementById('dashboard-content');
+            dashboard.insertAdjacentHTML('afterbegin', alertHTML);
+        }
+
+        function displayErrorAlert(fileType, result) {
+            const alertHTML = `
+                <div class="validation-alert bg-red-50 border-l-4 border-red-400 p-4 mb-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-times-circle text-red-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">
+                                Error Processing ${fileType.charAt(0).toUpperCase() + fileType.slice(1)} File
+                            </h3>
+                            <div class="mt-2 text-sm text-red-700">
+                                <p>${result.message}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Insert alert at the top of the dashboard
+            const dashboard = document.getElementById('dashboard-content');
+            dashboard.insertAdjacentHTML('afterbegin', alertHTML);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            if (!show) {
+                document.getElementById('upload-section').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html> 
