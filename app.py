@@ -19,15 +19,17 @@ from pathlib import Path
 from typing import Optional
 from io import StringIO
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import json
 import pandas as pd
 import numpy as np
+import asyncio
 
-from pipeline import run_pipeline
+from pipeline import run_pipeline, run_pipeline_with_progress
 
 # Initialize FastAPI app
 app = FastAPI(title="Qualitative Coding Agent v2", version="2.0.0")
@@ -43,6 +45,39 @@ app.add_middleware(
 
 # In-memory cache for processed dataframes with TTL
 DATA_CACHE = {}  # {job_id: {"data": df, "timestamp": datetime, "metadata": dict}}
+
+# WebSocket Connection Manager
+class ProgressManager:
+    def __init__(self):
+        self.active_connections: dict[str, WebSocket] = {}
+    
+    async def connect(self, websocket: WebSocket, job_id: str):
+        await websocket.accept()
+        self.active_connections[job_id] = websocket
+        print(f"WebSocket connected for job: {job_id}")
+    
+    def disconnect(self, job_id: str):
+        if job_id in self.active_connections:
+            del self.active_connections[job_id]
+            print(f"WebSocket disconnected for job: {job_id}")
+    
+    async def send_progress(self, job_id: str, stage: str, status: str, message: str = ""):
+        if job_id in self.active_connections:
+            try:
+                progress_data = {
+                    "stage": stage,
+                    "status": status,
+                    "message": message,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await self.active_connections[job_id].send_text(json.dumps(progress_data))
+                print(f"Sent progress update for {job_id}: {stage} - {status}")
+            except Exception as e:
+                print(f"Error sending progress update: {e}")
+                # Remove broken connection
+                self.disconnect(job_id)
+
+progress_manager = ProgressManager()
 
 class ProcessRequest(BaseModel):
     comments_file_path: str
@@ -124,6 +159,164 @@ async def serve_demo_csv():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "2.0.0"}
+
+
+@app.websocket("/ws/progress/{job_id}")
+async def websocket_progress(websocket: WebSocket, job_id: str):
+    """WebSocket endpoint for real-time progress updates"""
+    await progress_manager.connect(websocket, job_id)
+    try:
+        while True:
+            # Keep the connection alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        progress_manager.disconnect(job_id)
+
+
+@app.post("/api/v2/analyze-with-progress")
+async def process_files_with_progress(
+    comments_file: UploadFile = File(...),
+    schedule_file: Optional[UploadFile] = File(None),
+    grades_file: Optional[UploadFile] = File(None)
+):
+    """
+    Analysis endpoint that supports WebSocket progress tracking.
+    Returns a job_id immediately for WebSocket connection.
+    """
+    # Generate job ID immediately
+    job_id = str(uuid.uuid4())
+    
+    # Save files to temporary directory first (synchronously)
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Save comments file
+        comments_path = os.path.join(temp_dir, comments_file.filename)
+        with open(comments_path, "wb") as buffer:
+            shutil.copyfileobj(comments_file.file, buffer)
+        
+        # Save schedule file if provided
+        schedule_path = None
+        if schedule_file and schedule_file.filename:
+            schedule_path = os.path.join(temp_dir, schedule_file.filename)
+            with open(schedule_path, "wb") as buffer:
+                shutil.copyfileobj(schedule_file.file, buffer)
+        
+        # Save grades file if provided
+        grades_path = None
+        if grades_file and grades_file.filename:
+            grades_path = os.path.join(temp_dir, grades_file.filename)
+            with open(grades_path, "wb") as buffer:
+                shutil.copyfileobj(grades_file.file, buffer)
+        
+        # Start the analysis in the background with file paths
+        def run_background_analysis():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run_analysis_with_paths(job_id, comments_path, schedule_path, grades_path, temp_dir))
+            finally:
+                loop.close()
+        
+        threading.Thread(target=run_background_analysis, daemon=True).start()
+        
+    except Exception as e:
+        # Clean up temp directory if file saving fails
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process uploaded files: {str(e)}")
+    
+    # Return job ID for WebSocket connection
+    return {"job_id": job_id, "message": "Analysis started. Connect to WebSocket for progress updates."}
+
+
+async def run_analysis_with_paths(
+    job_id: str,
+    comments_path: str,
+    schedule_path: Optional[str] = None,
+    grades_path: Optional[str] = None,
+    temp_dir: str = None
+):
+    """
+    Run the analysis pipeline with progress updates via WebSocket
+    """
+    try:
+        await progress_manager.send_progress(job_id, "cleaning", "in_progress", "Cleaning & preparing data...")
+        
+        print(f"Processing files in temporary directory: {temp_dir}")
+        print(f"Comments file: {comments_path}")
+        if schedule_path:
+            print(f"Schedule file: {schedule_path}")
+        if grades_path:
+            print(f"Grades file: {grades_path}")
+        
+        await progress_manager.send_progress(job_id, "cleaning", "complete", "Data cleaning completed")
+        await progress_manager.send_progress(job_id, "coding", "in_progress", "Generating initial codes & sentiment analysis...")
+        
+        # Run the in-memory pipeline with progress tracking
+        print("Starting pipeline processing...")
+        results = await run_pipeline_with_progress(
+            job_id=job_id,
+            comments_file_path=comments_path,
+            schedule_file_path=schedule_path,
+            grades_file_path=grades_path
+        )
+
+        final_df = results["final_dataframe"]
+        markdown_report = results["markdown_report"]
+        executive_summary = results.get("executive_summary", "")
+        validation_results = results.get("validation_results", [])
+        
+        print(f"Pipeline completed. Final DataFrame shape: {final_df.shape}")
+        
+        # Cache the data with metadata  
+        DATA_CACHE[job_id] = {
+            "data": final_df.copy(),
+            "timestamp": datetime.now(),
+            "metadata": {
+                "comments_file": os.path.basename(comments_path),
+                "schedule_file": os.path.basename(schedule_path) if schedule_path else None,
+                "grades_file": os.path.basename(grades_path) if grades_path else None,
+                "total_rows": len(final_df),
+                "total_columns": len(final_df.columns)
+            }
+        }
+        
+        print(f"Cached results with job ID: {job_id}")
+
+        # Convert dataframe to JSON for the response
+        dashboard_json = final_df.to_dict(orient='records')
+        
+        # Clean the JSON data
+        dashboard_json = clean_for_json_response(dashboard_json)
+        
+        # Send completion via WebSocket
+        await progress_manager.send_progress(job_id, "complete", "complete", "Analysis completed successfully!")
+        
+        # Send final results via WebSocket
+        completion_data = {
+            "stage": "results",
+            "status": "complete",
+            "data": {
+                "jobId": job_id,
+                "dashboardData": dashboard_json,
+                "markdownReport": markdown_report,
+                "executiveSummary": executive_summary,
+                "validationResults": validation_results
+            }
+        }
+        
+        if job_id in progress_manager.active_connections:
+            await progress_manager.active_connections[job_id].send_text(json.dumps(completion_data))
+
+    except Exception as e:
+        error_message = f"Analysis failed: {str(e)}"
+        print(f"Error in analysis: {error_message}")
+        await progress_manager.send_progress(job_id, "error", "error", error_message)
+        
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            print(f"Cleaned up temporary directory: {temp_dir}")
 
 
 @app.post("/api/v2/analyze")

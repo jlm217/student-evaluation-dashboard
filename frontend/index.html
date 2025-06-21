@@ -122,6 +122,86 @@
             border: 1px solid #e2e8f0;
             margin-bottom: 32px;
         }
+        
+        /* Progress Tracker Styles */
+        .progress-tracker {
+            display: none;
+        }
+        .progress-step {
+            position: relative;
+            padding-left: 60px;
+        }
+        .step-icon {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+        .step-icon.pending {
+            background: #f3f4f6;
+            color: #9ca3af;
+            border: 2px solid #e5e7eb;
+        }
+        .step-icon.in_progress {
+            background: #dbeafe;
+            color: #3b82f6;
+            border: 2px solid #3b82f6;
+            animation: pulse 2s infinite;
+        }
+        .step-icon.complete {
+            background: #dcfce7;
+            color: #16a34a;
+            border: 2px solid #16a34a;
+        }
+        .step-icon.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 2px solid #dc2626;
+        }
+        .step-content {
+            margin-left: 16px;
+            padding-top: 8px;
+        }
+        .step-connector {
+            position: absolute;
+            left: 23px;
+            top: 48px;
+            width: 2px;
+            height: 40px;
+            background: #e5e7eb;
+            transition: background-color 0.3s ease;
+        }
+        .step-connector.active {
+            background: #16a34a;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .data-flow-animation {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        /* Batch Progress Styles */
+        .batch-progress {
+            margin-top: 8px;
+            padding-left: 4px;
+        }
+        .batch-progress.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body class="text-gray-800">
@@ -180,6 +260,107 @@
             <div class="spinner"></div>
             <span style="font-size: 1.1rem; color: #374151;">Processing your data...</span>
             <p class="text-sm text-gray-600 mt-2">This may take a few minutes depending on the size of your data.</p>
+        </div>
+
+        <!-- Progress Tracker Section -->
+        <div class="card progress-tracker" id="progress-tracker" style="display: none;">
+            <div class="mb-6">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-2">
+                    <i class="fas fa-cogs mr-2 text-indigo-500"></i>Analysis in Progress
+                </h2>
+                <p class="text-gray-600">Please wait while we process your data through our analysis pipeline...</p>
+            </div>
+
+            <!-- Progress Steps -->
+            <div class="space-y-6">
+                <!-- Step 1: Cleaning -->
+                <div class="progress-step" id="step-cleaning">
+                    <div class="flex items-center">
+                        <div class="step-icon pending" id="icon-cleaning">
+                            <i class="fas fa-broom"></i>
+                        </div>
+                        <div class="step-content">
+                            <h3 class="font-semibold text-gray-800">Cleaning & Preparing Data</h3>
+                            <p class="text-sm text-gray-600" id="msg-cleaning">Validating and formatting your uploaded files...</p>
+                        </div>
+                    </div>
+                    <div class="step-connector" id="connector-cleaning"></div>
+                </div>
+
+                <!-- Step 2: Coding -->
+                <div class="progress-step" id="step-coding">
+                    <div class="flex items-center">
+                        <div class="step-icon pending" id="icon-coding">
+                            <i class="fas fa-tags"></i>
+                        </div>
+                        <div class="step-content">
+                            <h3 class="font-semibold text-gray-800">Generating Initial Codes & Sentiment</h3>
+                            <p class="text-sm text-gray-600" id="msg-coding">AI-powered analysis of student responses...</p>
+                            <div class="batch-progress hidden" id="batch-progress-coding">
+                                <div class="mt-2 text-xs text-indigo-600 font-medium" id="batch-text-coding"></div>
+                                <div class="mt-1 w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-300" id="batch-bar-coding" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="step-connector" id="connector-coding"></div>
+                </div>
+
+                <!-- Step 3: Themes -->
+                <div class="progress-step" id="step-themes">
+                    <div class="flex items-center">
+                        <div class="step-icon pending" id="icon-themes">
+                            <i class="fas fa-lightbulb"></i>
+                        </div>
+                        <div class="step-content">
+                            <h3 class="font-semibold text-gray-800">Synthesizing Themes</h3>
+                            <p class="text-sm text-gray-600" id="msg-themes">Identifying patterns and key insights...</p>
+                        </div>
+                    </div>
+                    <div class="step-connector" id="connector-themes"></div>
+                </div>
+
+                <!-- Step 4: Summary -->
+                <div class="progress-step" id="step-summary">
+                    <div class="flex items-center">
+                        <div class="step-icon pending" id="icon-summary">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <div class="step-content">
+                            <h3 class="font-semibold text-gray-800">Generating Executive Summary</h3>
+                            <p class="text-sm text-gray-600" id="msg-summary">Creating comprehensive analysis report...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Animation Container -->
+            <div class="mt-8 data-flow-animation">
+                <svg class="w-full h-16" viewBox="0 0 400 64">
+                    <!-- Background track -->
+                    <line x1="50" y1="32" x2="350" y2="32" stroke="#e5e7eb" stroke-width="2"/>
+                    
+                    <!-- Animated flow -->
+                    <circle id="data-flow-dot" cx="50" cy="32" r="4" fill="#4f46e5" opacity="0">
+                        <animate attributeName="cx" values="50;350" dur="3s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0;1;1;0" dur="3s" repeatCount="indefinite"/>
+                    </circle>
+                    
+                    <!-- Data points -->
+                    <g id="data-points">
+                        <circle cx="100" cy="32" r="2" fill="#10b981" opacity="0.6"/>
+                        <circle cx="150" cy="32" r="2" fill="#f59e0b" opacity="0.6"/>
+                        <circle cx="200" cy="32" r="2" fill="#ef4444" opacity="0.6"/>
+                        <circle cx="250" cy="32" r="2" fill="#8b5cf6" opacity="0.6"/>
+                        <circle cx="300" cy="32" r="2" fill="#06b6d4" opacity="0.6"/>
+                    </g>
+                </svg>
+                <div class="text-center text-sm text-gray-500 mt-2">
+                    <i class="fas fa-database mr-1"></i>
+                    Processing your data through our analysis pipeline
+                </div>
+            </div>
         </div>
 
         <!-- Interactive Dashboard -->
@@ -412,16 +593,18 @@
             }
         }
 
-        // Main analyze function using /api/v2/analyze endpoint as per PRD
+        // WebSocket connection for progress updates
+        let progressWebSocket = null;
+
+        // Main analyze function with real-time progress tracking
         async function analyzeFiles() {
             if (!selectedFiles.comments) {
                 alert('Please select a Student Comments file first (required).');
                 return;
             }
 
-            showLoading(true);
-
             try {
+                // Step 1: Start the analysis and get job ID
                 const formData = new FormData();
                 formData.append('comments_file', selectedFiles.comments);
                 
@@ -433,7 +616,7 @@
                     formData.append('grades_file', selectedFiles.grades);
                 }
 
-                const response = await fetch('/api/v2/analyze', {
+                const response = await fetch('/api/v2/analyze-with-progress', {
                     method: 'POST',
                     body: formData,
                 });
@@ -442,35 +625,258 @@
                     throw new Error(`Analysis failed: ${response.statusText}`);
                 }
 
-                const analysisData = await response.json();
-                console.log('Analysis complete:', analysisData);
+                const startData = await response.json();
+                currentJobId = startData.job_id;
+                
+                console.log('Analysis started with job ID:', currentJobId);
 
-                // Store the job ID for downloading
-                currentJobId = analysisData.jobId;
-
-                // Check for validation warnings and display them
-                if (analysisData.validationResults) {
-                    displayValidationAlerts(analysisData.validationResults);
-                }
-
-                // Use the dashboard data directly from the API response
-                if (analysisData.dashboardData && analysisData.dashboardData.length > 0) {
-                    processedData = {
-                        dashboardData: analysisData.dashboardData,
-                        markdownReport: analysisData.markdownReport,
-                        executiveSummary: analysisData.executiveSummary,
-                        jobId: analysisData.jobId
-                    };
-                    showLoading(false);
-                    displayDashboard(analysisData.dashboardData, analysisData.executiveSummary || analysisData.markdownReport);
-                } else {
-                    throw new Error('No dashboard data generated');
-                }
+                // Step 2: Show progress tracker and connect WebSocket
+                showProgressTracker();
+                connectProgressWebSocket(currentJobId);
 
             } catch (error) {
-                console.error('Error:', error);
-                showLoading(false);
-                alert(`Error analyzing files: ${error.message}. Please try again.`);
+                console.error('Error starting analysis:', error);
+                alert(`Error starting analysis: ${error.message}. Please try again.`);
+            }
+        }
+
+        function showProgressTracker() {
+            // Hide upload section and show progress tracker
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('progress-tracker').style.display = 'block';
+            
+            // Reset all progress steps to pending
+            resetProgressSteps();
+        }
+
+        function resetProgressSteps() {
+            const steps = ['cleaning', 'coding', 'themes', 'summary'];
+            steps.forEach(step => {
+                const icon = document.getElementById(`icon-${step}`);
+                icon.className = 'step-icon pending';
+                
+                const connector = document.getElementById(`connector-${step}`);
+                if (connector) {
+                    connector.className = 'step-connector';
+                }
+                
+                // Reset batch progress
+                const batchProgress = document.getElementById(`batch-progress-${step}`);
+                if (batchProgress) {
+                    batchProgress.classList.add('hidden');
+                    const batchBar = document.getElementById(`batch-bar-${step}`);
+                    if (batchBar) {
+                        batchBar.style.width = '0%';
+                    }
+                }
+            });
+        }
+
+        function connectProgressWebSocket(jobId) {
+            // Use WebSocket (ws://) for local development, wss:// for production
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/progress/${jobId}`;
+            
+            console.log('Connecting to WebSocket:', wsUrl);
+            
+            progressWebSocket = new WebSocket(wsUrl);
+            
+            progressWebSocket.onopen = function(event) {
+                console.log('WebSocket connected for job:', jobId);
+            };
+            
+            progressWebSocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                console.log('Progress update:', data);
+                
+                if (data.stage === 'results') {
+                    // Analysis complete - display results
+                    handleAnalysisComplete(data.data);
+                } else if (data.stage === 'error') {
+                    // Handle error
+                    handleAnalysisError(data.message);
+                } else {
+                    // Update progress step
+                    updateProgressStep(data.stage, data.status, data.message);
+                }
+            };
+            
+            progressWebSocket.onclose = function(event) {
+                console.log('WebSocket closed');
+            };
+            
+            progressWebSocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                handleAnalysisError('Connection error during analysis');
+            };
+        }
+
+        function updateProgressStep(stage, status, message) {
+            const icon = document.getElementById(`icon-${stage}`);
+            const messageEl = document.getElementById(`msg-${stage}`);
+            const connector = document.getElementById(`connector-${stage}`);
+            const batchProgress = document.getElementById(`batch-progress-${stage}`);
+            
+            if (icon) {
+                // Update icon status
+                icon.className = `step-icon ${status}`;
+                
+                // Update icon for completed steps
+                if (status === 'complete') {
+                    icon.innerHTML = '<i class="fas fa-check"></i>';
+                    if (connector) {
+                        connector.className = 'step-connector active';
+                    }
+                    // Hide batch progress when complete
+                    if (batchProgress) {
+                        batchProgress.classList.add('hidden');
+                    }
+                } else if (status === 'in_progress') {
+                    // Keep original icon for in_progress
+                    const originalIcons = {
+                        'cleaning': 'fa-broom',
+                        'coding': 'fa-tags', 
+                        'themes': 'fa-lightbulb',
+                        'summary': 'fa-file-alt'
+                    };
+                    icon.innerHTML = `<i class="fas ${originalIcons[stage]}"></i>`;
+                    
+                    // Show batch progress for applicable stages and check if message contains batch info
+                    console.log('Checking batch progress:', { stage, message, hasBatchProgress: !!batchProgress, includesBatch: message?.includes('batch') });
+                    if (batchProgress && message && message.includes('batch')) {
+                        console.log('Calling updateBatchProgress for:', stage, message);
+                        updateBatchProgress(stage, message);
+                    }
+                } else if (status === 'error') {
+                    icon.innerHTML = '<i class="fas fa-times"></i>';
+                    // Hide batch progress on error
+                    if (batchProgress) {
+                        batchProgress.classList.add('hidden');
+                    }
+                }
+            }
+            
+            if (messageEl && message) {
+                // Don't show batch details in main message if it's a batch update
+                if (message && message.includes('batch') && batchProgress) {
+                    // Keep the original message
+                    if (!messageEl.textContent.includes('batch')) {
+                        messageEl.textContent = message.split('(')[0].trim() || message;
+                    }
+                } else {
+                    messageEl.textContent = message;
+                }
+            }
+        }
+
+        function updateBatchProgress(stage, message) {
+            console.log('updateBatchProgress called:', stage, message);
+            
+            const batchProgress = document.getElementById(`batch-progress-${stage}`);
+            const batchText = document.getElementById(`batch-text-${stage}`);
+            const batchBar = document.getElementById(`batch-bar-${stage}`);
+            
+            console.log('Elements found:', {
+                batchProgress: !!batchProgress,
+                batchText: !!batchText,
+                batchBar: !!batchBar
+            });
+            
+            if (!batchProgress || !batchText || !batchBar) {
+                console.log('Missing elements for batch progress');
+                return;
+            }
+            
+            // Show the batch progress
+            batchProgress.classList.remove('hidden');
+            console.log('Batch progress shown');
+            
+            // Extract percentage from message like "Processing batch 2 of 5 (40%)"
+            const percentMatch = message.match(/\((\d+)%\)/);
+            const batchMatch = message.match(/batch (\d+) of (\d+)/);
+            
+            console.log('Regex matches:', { percentMatch, batchMatch });
+            
+            if (percentMatch && batchMatch) {
+                const percentage = parseInt(percentMatch[1]);
+                const currentBatch = batchMatch[1];
+                const totalBatches = batchMatch[2];
+                
+                console.log('Updating progress:', { percentage, currentBatch, totalBatches });
+                
+                // Update text
+                batchText.textContent = `Batch ${currentBatch} of ${totalBatches}`;
+                
+                // Update progress bar
+                batchBar.style.width = `${percentage}%`;
+                
+                console.log('Progress updated successfully');
+            } else if (message.includes('Completed all')) {
+                // Handle completion message
+                batchText.textContent = 'All batches completed';
+                batchBar.style.width = '100%';
+                
+                console.log('Completion message handled');
+                
+                // Hide after a short delay
+                setTimeout(() => {
+                    batchProgress.classList.add('hidden');
+                }, 1500);
+            } else {
+                console.log('Message format not recognized');
+            }
+        }
+
+        function handleAnalysisComplete(analysisData) {
+            console.log('Analysis complete:', analysisData);
+            
+            // Store the job ID for downloading
+            currentJobId = analysisData.jobId;
+            
+            // Store processed data
+            processedData = {
+                dashboardData: analysisData.dashboardData,
+                markdownReport: analysisData.markdownReport,
+                executiveSummary: analysisData.executiveSummary,
+                jobId: analysisData.jobId
+            };
+            
+            // Check for validation warnings and display them
+            if (analysisData.validationResults) {
+                displayValidationAlerts(analysisData.validationResults);
+            }
+            
+            // Hide progress tracker and show dashboard
+            document.getElementById('progress-tracker').style.display = 'none';
+            
+            // Use the dashboard data directly from the API response
+            if (analysisData.dashboardData && analysisData.dashboardData.length > 0) {
+                displayDashboard(analysisData.dashboardData, analysisData.executiveSummary || analysisData.markdownReport);
+            } else {
+                throw new Error('No dashboard data generated');
+            }
+            
+            // Close WebSocket connection
+            if (progressWebSocket) {
+                progressWebSocket.close();
+                progressWebSocket = null;
+            }
+        }
+
+        function handleAnalysisError(errorMessage) {
+            console.error('Analysis error:', errorMessage);
+            
+            // Show error state in UI
+            document.getElementById('progress-tracker').style.display = 'none';
+            document.getElementById('upload-section').style.display = 'block';
+            
+            alert(`Analysis failed: ${errorMessage}. Please try again.`);
+            
+            // Close WebSocket connection
+            if (progressWebSocket) {
+                progressWebSocket.close();
+                progressWebSocket = null;
             }
         }
 

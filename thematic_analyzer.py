@@ -163,24 +163,22 @@ Return your analysis as a JSON object:
     
     return prompt_template
 
-def generate_themes(codes_list: List[str]) -> Optional[Dict[str, Any]]:
+def generate_themes_single_chunk(codes_list: List[str]) -> Optional[Dict[str, Any]]:
     """
-    Generate themes from the list of initial codes using Gemini API.
+    Generate themes from a single chunk of initial codes using Gemini API.
     
     Args:
-        codes_list (List[str]): List of initial codes to analyze
+        codes_list (List[str]): List of initial codes to analyze (should be <= 150 codes)
         
     Returns:
         Dict[str, Any] or None: Themes data or None if error
     """
     try:
-        print(f"Generating themes from {len(codes_list)} initial codes...")
-        
         # Create the prompt
         prompt = create_thematic_prompt(codes_list)
         
         # Call Gemini API
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(prompt)
         
         # Parse JSON response
@@ -196,15 +194,246 @@ def generate_themes(codes_list: List[str]) -> Optional[Dict[str, Any]]:
         # Parse JSON
         themes_data = json.loads(response_text)
         
-        print(f"✓ Generated {len(themes_data.get('themes', []))} themes")
         return themes_data
         
     except json.JSONDecodeError as e:
-        print(f"Error parsing JSON response: {e}")
-        print(f"Response text: {response_text}")
+        print(f"Error parsing JSON response from chunk: {e}")
         return None
     except Exception as e:
-        print(f"Error generating themes: {e}")
+        print(f"Error generating themes for chunk: {e}")
+        return None
+
+
+def create_consolidation_prompt(chunk_themes: List[Dict[str, Any]]) -> str:
+    """
+    Create a prompt for consolidating themes from multiple chunks.
+    
+    Args:
+        chunk_themes (List[Dict]): List of theme objects from different chunks
+        
+    Returns:
+        str: Consolidation prompt
+    """
+    prompt_template = """Role: You are a senior qualitative researcher performing meta-analysis on themes generated from multiple chunks of qualitative data.
+
+Task: You have been given a list of themes that were generated from different chunks of student feedback codes. Your task is to consolidate these into a final set of 8-12 overarching themes by:
+
+1. **Identifying Overlapping Themes**: Look for themes that represent the same core concept but may have slightly different names or descriptions.
+
+2. **Merging Related Themes**: Combine themes that address the same domain or area of concern.
+
+3. **Preserving Distinct Themes**: Keep themes that represent unique aspects of the feedback.
+
+4. **Creating Comprehensive Themes**: Ensure your final themes capture the full breadth of the original data.
+
+Instructions:
+- Review all the themes provided below
+- Group related/overlapping themes together
+- Create a final set of consolidated themes with clear, descriptive names
+- For each final theme, provide a comprehensive description and list ALL supporting codes from the original themes
+- Return your analysis as a JSON object with the same structure as the input
+
+Input Themes from Chunks:
+"""
+    
+    # Add all chunk themes to the prompt
+    for i, theme in enumerate(chunk_themes, 1):
+        prompt_template += f"\n**Theme {i}:**\n"
+        prompt_template += f"Name: {theme.get('theme_name', '')}\n"
+        prompt_template += f"Description: {theme.get('theme_description', '')}\n"
+        prompt_template += f"Supporting Codes: {', '.join(theme.get('supporting_codes', []))}\n"
+    
+    prompt_template += """\n\nReturn your consolidated analysis as a JSON object:
+
+{
+  "themes": [
+    {
+      "theme_name": "Consolidated Theme Name",
+      "theme_description": "Comprehensive description that captures the essence of merged themes",
+      "supporting_codes": ["all", "codes", "from", "merged", "themes"]
+    }
+  ]
+}"""
+    
+    return prompt_template
+
+
+def consolidate_themes(chunk_themes: List[Dict[str, Any]], max_themes_per_round: int = 20) -> Optional[Dict[str, Any]]:
+    """
+    Consolidate themes from multiple chunks into final themes using hierarchical approach.
+    
+    Args:
+        chunk_themes (List[Dict]): List of theme objects from different chunks
+        max_themes_per_round (int): Maximum themes to consolidate in one API call
+        
+    Returns:
+        Dict[str, Any] or None: Consolidated themes data or None if error
+    """
+    try:
+        print(f"Consolidating {len(chunk_themes)} themes from chunks...")
+        
+        # If we have few enough themes, consolidate them all at once
+        if len(chunk_themes) <= max_themes_per_round:
+            print("Consolidating all themes in single round...")
+            prompt = create_consolidation_prompt(chunk_themes)
+            
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            response = model.generate_content(prompt)
+            
+            response_text = response.text.strip()
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
+            consolidated_themes = json.loads(response_text)
+            print(f"✓ Consolidated into {len(consolidated_themes.get('themes', []))} final themes")
+            return consolidated_themes
+        
+        # Hierarchical consolidation for large sets
+        print(f"Too many themes for single round, using hierarchical consolidation...")
+        print(f"Processing themes in batches of {max_themes_per_round}...")
+        
+        current_themes = chunk_themes.copy()
+        round_num = 1
+        
+        while len(current_themes) > max_themes_per_round:
+            print(f"Consolidation round {round_num}: {len(current_themes)} themes -> batches of {max_themes_per_round}")
+            
+            # Split current themes into batches
+            batches = [current_themes[i:i+max_themes_per_round] 
+                      for i in range(0, len(current_themes), max_themes_per_round)]
+            
+            next_round_themes = []
+            
+            for i, batch in enumerate(batches, 1):
+                print(f"  Processing batch {i}/{len(batches)} ({len(batch)} themes)...")
+                
+                try:
+                    prompt = create_consolidation_prompt(batch)
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    response = model.generate_content(prompt)
+                    
+                    response_text = response.text.strip()
+                    if response_text.startswith('```json'):
+                        response_text = response_text[7:]
+                    if response_text.endswith('```'):
+                        response_text = response_text[:-3]
+                    response_text = response_text.strip()
+                    
+                    batch_result = json.loads(response_text)
+                    if batch_result and 'themes' in batch_result:
+                        batch_themes = batch_result['themes']
+                        next_round_themes.extend(batch_themes)
+                        print(f"    ✓ Batch {i} consolidated to {len(batch_themes)} themes")
+                    else:
+                        print(f"    ⚠️ Batch {i} failed, keeping original themes")
+                        next_round_themes.extend(batch)
+                        
+                except Exception as e:
+                    print(f"    ⚠️ Error in batch {i}: {e}, keeping original themes")
+                    next_round_themes.extend(batch)
+            
+            current_themes = next_round_themes
+            round_num += 1
+            print(f"Round {round_num-1} complete: {len(current_themes)} themes remaining")
+            
+            # Safety check to prevent infinite loops
+            if round_num > 5:
+                print("⚠️ Maximum consolidation rounds reached, stopping")
+                break
+        
+        # Final consolidation round
+        if len(current_themes) <= max_themes_per_round:
+            print(f"Final consolidation round: {len(current_themes)} themes")
+            prompt = create_consolidation_prompt(current_themes)
+            
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            response = model.generate_content(prompt)
+            
+            response_text = response.text.strip()
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
+            final_themes = json.loads(response_text)
+            print(f"✓ Final consolidation complete: {len(final_themes.get('themes', []))} themes")
+            return final_themes
+        else:
+            # If still too many, return what we have
+            print(f"⚠️ Still have {len(current_themes)} themes, returning as-is")
+            return {'themes': current_themes}
+        
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON response from consolidation: {e}")
+        return None
+    except Exception as e:
+        print(f"Error consolidating themes: {e}")
+        return None
+
+
+def generate_themes(codes_list: List[str], chunk_size: int = 150) -> Optional[Dict[str, Any]]:
+    """
+    Generate themes from the list of initial codes using chunked processing for large datasets.
+    
+    Args:
+        codes_list (List[str]): List of initial codes to analyze
+        chunk_size (int): Maximum number of codes per chunk (default: 150)
+        
+    Returns:
+        Dict[str, Any] or None: Themes data or None if error
+    """
+    try:
+        print(f"Generating themes from {len(codes_list)} initial codes...")
+        
+        # If the dataset is small enough, use the original single-call approach
+        if len(codes_list) <= chunk_size:
+            print("Dataset is small enough for single API call")
+            return generate_themes_single_chunk(codes_list)
+        
+        # Phase 2A: Generate themes for each chunk
+        print(f"Dataset is large, using chunked approach with {chunk_size} codes per chunk...")
+        
+        chunks = [codes_list[i:i+chunk_size] for i in range(0, len(codes_list), chunk_size)]
+        print(f"Processing {len(chunks)} chunks...")
+        
+        all_chunk_themes = []
+        
+        for i, chunk in enumerate(chunks, 1):
+            print(f"Processing chunk {i}/{len(chunks)} ({len(chunk)} codes)...")
+            
+            chunk_result = generate_themes_single_chunk(chunk)
+            if chunk_result and 'themes' in chunk_result:
+                chunk_themes = chunk_result['themes']
+                all_chunk_themes.extend(chunk_themes)
+                print(f"✓ Generated {len(chunk_themes)} themes from chunk {i}")
+            else:
+                print(f"⚠️ Failed to generate themes for chunk {i}")
+        
+        if not all_chunk_themes:
+            print("No themes generated from any chunks")
+            return None
+        
+        print(f"Total themes from all chunks: {len(all_chunk_themes)}")
+        
+        # Phase 2B: Consolidate themes
+        print("Consolidating themes across chunks...")
+        consolidated_result = consolidate_themes(all_chunk_themes)
+        
+        if consolidated_result:
+            final_themes = consolidated_result.get('themes', [])
+            print(f"✓ Successfully consolidated into {len(final_themes)} final themes")
+            return consolidated_result
+        else:
+            # Fallback: return all chunk themes if consolidation fails
+            print("⚠️ Consolidation failed, returning all chunk themes")
+            return {'themes': all_chunk_themes}
+        
+    except Exception as e:
+        print(f"Error in chunked theme generation: {e}")
         return None
 
 def write_markdown_report(themes_data: Dict[str, Any], output_path: str = "themes_report.md") -> bool:

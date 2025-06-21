@@ -23,6 +23,7 @@ import google.generativeai as genai
 from formatter import format_data
 from main import process_csv_in_batches, load_config
 from thematic_analyzer import analyze_themes
+import asyncio
 
 
 def smart_column_mapping(df: pd.DataFrame, target_columns: list) -> Dict[str, str]:
@@ -280,9 +281,133 @@ def clean_for_json_serialization(df: pd.DataFrame) -> pd.DataFrame:
     return clean_df
 
 
+def create_hybrid_summary_json(final_df: pd.DataFrame) -> dict:
+    """
+    Create a hybrid JSON payload that efficiently combines qualitative and quantitative data.
+    
+    This function implements the PRD strategy of separating:
+    1. qualitative_data: ALL comment records with essential columns
+    2. quantitative_summary: Aggregated section-level data (unique sections only)
+    
+    Args:
+        final_df (pd.DataFrame): Final merged DataFrame with all analysis data
+        
+    Returns:
+        dict: Hybrid JSON object with qualitative_data and quantitative_summary
+    """
+    print("📊 Creating hybrid summary JSON payload...")
+    
+    # Phase 1.2: Build qualitative_data payload
+    qualitative_columns = [
+        'crs_number', 'SectionNumber_ASU', 'Instructor', 'Instruction_Mode', 
+        'Term', 'question', 'response', 'Theme', 'Sentiment'
+    ]
+    
+    # Select available qualitative columns
+    available_qual_cols = [col for col in qualitative_columns if col in final_df.columns]
+    
+    # Handle column name variations
+    column_mapping = {
+        'Instruction Mode': 'Instruction_Mode',
+        'Modality': 'Instruction_Mode',
+        'Term/Session': 'Term'
+    }
+    
+    # Apply column mapping if needed
+    for old_col, new_col in column_mapping.items():
+        if old_col in final_df.columns and new_col not in final_df.columns:
+            final_df[new_col] = final_df[old_col]
+            if new_col not in available_qual_cols and new_col in qualitative_columns:
+                available_qual_cols.append(new_col)
+    
+    print(f"   📝 Qualitative columns: {available_qual_cols}")
+    
+    # Create qualitative data
+    qualitative_data = final_df[available_qual_cols].to_dict('records')
+    
+    # Phase 1.3: Build quantitative_summary payload
+    quantitative_columns = [
+        'SectionNumber_ASU', 'Instructor', 'Instruction_Mode', 'Term', 
+        'Total_Enrollment', 'A', 'B', 'C', 'D', 'E', 'W'
+    ]
+    
+    # Handle column name variations for quantitative data
+    quant_column_mapping = {
+        'Total Enrollment': 'Total_Enrollment',
+        'Instruction Mode': 'Instruction_Mode',
+        'Modality': 'Instruction_Mode',
+        'Term/Session': 'Term'
+    }
+    
+    # Apply quantitative column mapping
+    for old_col, new_col in quant_column_mapping.items():
+        if old_col in final_df.columns and new_col not in final_df.columns:
+            final_df[new_col] = final_df[old_col]
+    
+    # Select available quantitative columns
+    available_quant_cols = [col for col in quantitative_columns if col in final_df.columns]
+    
+    print(f"   📊 Quantitative columns: {available_quant_cols}")
+    
+    # Create unique sections dataframe
+    if available_quant_cols:
+        sections_df = final_df[available_quant_cols].drop_duplicates(subset=['SectionNumber_ASU'])
+        
+        # Calculate DEW rate and grade distribution for each section
+        quantitative_summary = []
+        
+        for _, section in sections_df.iterrows():
+            section_data = {
+                'SectionNumber_ASU': int(section['SectionNumber_ASU']) if pd.notna(section['SectionNumber_ASU']) else None,
+                'Instructor': section.get('Instructor', ''),
+                'Instruction_Mode': section.get('Instruction_Mode', ''),
+                'Term': section.get('Term', ''),
+                'Total_Enrollment': int(section.get('Total_Enrollment', 0)) if pd.notna(section.get('Total_Enrollment', 0)) else 0
+            }
+            
+            # Calculate grade distribution
+            grade_columns = ['A', 'B', 'C', 'D', 'E', 'W']
+            grade_distribution = {}
+            total_graded = 0
+            
+            for grade in grade_columns:
+                if grade in section and pd.notna(section[grade]):
+                    count = int(section[grade])
+                    grade_distribution[grade] = count
+                    total_graded += count
+                else:
+                    grade_distribution[grade] = 0
+            
+            # Calculate DEW rate (D, E, W grades)
+            dew_count = grade_distribution.get('D', 0) + grade_distribution.get('E', 0) + grade_distribution.get('W', 0)
+            dew_rate = (dew_count / total_graded * 100) if total_graded > 0 else 0
+            
+            section_data['DEW_Rate_Percent'] = round(dew_rate, 1)
+            section_data['Grade_Distribution'] = grade_distribution
+            
+            quantitative_summary.append(section_data)
+    else:
+        quantitative_summary = []
+    
+    # Phase 1.4: Assemble final hybrid object
+    hybrid_payload = {
+        'qualitative_data': qualitative_data,
+        'quantitative_summary': quantitative_summary
+    }
+    
+    print(f"   ✅ Hybrid payload created:")
+    print(f"      📝 Qualitative records: {len(qualitative_data)}")
+    print(f"      📊 Quantitative sections: {len(quantitative_summary)}")
+    
+    return hybrid_payload
+
+
 def generate_executive_summary(final_df: pd.DataFrame) -> str:
     """
-    Generate an executive summary based on the final merged dataset.
+    Generate an executive summary using the hybrid data model approach.
+    
+    Uses create_hybrid_summary_json to create a token-efficient payload that combines
+    all qualitative data with aggregated quantitative data.
     
     Args:
         final_df (pd.DataFrame): Final merged DataFrame with all analysis data
@@ -294,34 +419,45 @@ def generate_executive_summary(final_df: pd.DataFrame) -> str:
         print("\n📝 PHASE 4: EXECUTIVE SUMMARY GENERATION")
         print("-" * 50)
         
-        # Convert DataFrame to JSON for the prompt
-        data_json = final_df.to_json(orient='records', indent=2)
+        # Phase 2.1: Create hybrid summary JSON
+        hybrid_data = create_hybrid_summary_json(final_df)
         
-        # Create the executive summary prompt
-        executive_summary_prompt = f"""Role: You are an expert educational data analyst and strategist. Your task is to write a concise executive summary based on a comprehensive dataset of student feedback, course details, and grade distributions. The audience for this report is a university department head who needs to quickly understand the key findings and make data-driven decisions.
+        # Convert to JSON string for the prompt
+        data_json = json.dumps(hybrid_data, indent=2, default=str)
+        
+        print(f"   📏 Payload size: ~{len(data_json):,} characters")
+        
+        # Create the updated executive summary prompt for hybrid data
+        executive_summary_prompt = f"""Role: You are an expert educational data analyst and strategist.
+Objective: Produce a concise, decision-ready executive summary that fuses student feedback (qualitative_data) with course performance metrics (quantitative_summary). The primary audience is a busy department head who needs key insights and next steps in ≤ 2 pages. Assume a team of experts will have great insight as the look closer at your observations. Your role is to spot important patterns and trends and recommed steps that point them in the right direction.
 
-Task: Analyze the provided JSON data and generate a structured report. The report should identify high-level trends, compare different course sections or modalities, highlight what is working well, and pinpoint areas for improvement.
+Task: Analyze the provided hybrid JSON data and generate a structured report. The data contains two parts:
+1. qualitative_data: Complete student feedback with themes and sentiment analysis
+2. quantitative_summary: Aggregated section-level performance metrics and grade distributions
 
 Instructions:
-1. Analyze Holistically: Review the entire dataset to understand the relationships between qualitative feedback (comments, themes, sentiment) and quantitative data (grades, enrollment, modality).
-2. Structure Your Report: Generate the report in markdown format with the following sections:
-    * ### Overall Summary: A brief, top-level paragraph summarizing the most significant findings from the data.
-    * ### Key Strengths: Identify 2-3 aspects that are working well. Use positive-sentiment themes and specific examples as evidence. Mention if these strengths are consistent across all sections or concentrated in specific ones.
-    * ### Areas for Improvement: Identify the 2-3 most critical areas needing attention. Use negative-sentiment themes and grade data (e.g., high DEW rates) as evidence. Quote specific, illustrative comments to support your points.
-    * ### Patterns and Comparisons: Highlight any interesting patterns. For example:
-        * Does one instructor consistently receive more positive feedback on a specific theme?
-        * Is there a difference in feedback between "Online" and "In-Person" modalities?
-        * Is there a correlation between high DEW (Drop/Fail/Withdraw) rates and negative course evaluations?
-        * Does student feedback differ by course modality suggesting a preference or perceived effectiveness of one mode over another?
-        * Does student feedback vary by session length (Session A/B vs. Session C), indicating a preference for 7.5-week vs. 16-week formats?
-    * ### Actionable Recommendations: Based on your analysis, suggest 1-2 concrete, actionable steps or areas for future investigation. These should be based in the students comments as evidence.
+1. Analyze Holistically: Review both qualitative feedback and quantitative data to understand correlations and patterns.
+2. Compose Report (markdown): Generate the report in markdown format with the following sections (your response should start at the Overall Summary):
+    * ### Overall Summary: A brief, top-level paragraph summarizing the most significant findings from both qualitative and quantitative data.
+    * ### Key Strengths: 2–3 bullets, each containing: theme name, prevalence, use specific student question and response quotes, and supporting DEW or grade data.
+    * ### Areas for Improvement: Identify the 2-3 most critical areas needing attention. Consider negative-sentiment themes and high DEW rates as evidence. Quote specific, illustrative comments and cite relevant performance metrics.
+    * ### Patterns and Comparisons: 3–5 sentences (or a mini-table) noting instructor, mode, or section contrasts. For example:
+        * Do sections with positive feedback themes also show better grade distributions?
+        * Is there a correlation between instructor performance (DEW rates) and student sentiment?
+        * Does student feedback differ by modaility (Online vs In-Person) and does this correlate with academic outcomes?
+        * Are there specific themes that correlate with higher or lower student success rates?
+    * ### Actionable Recommendations: Based on your analysis, suggest 2-3 concrete, actionable steps supported by both student comments and performance data.
+Format & tone: Neutral, student-centric, evidence-first; avoid jargon; bold themes when used; attibute quote in text citation; use section-level end notes for other citations; total length ≈ 400–600 words.
+
+Data Structure:
+- qualitative_data: Array of student feedback records with crs_number, SectionNumber_ASU, Instructor, Instruction_Mode, Term, question, response, Theme, Sentiment
+- quantitative_summary: Array of section performance records with SectionNumber_ASU, Instructor, Instruction_Mode, Term, Total_Enrollment, DEW_Rate_Percent, Grade_Distribution
 
 Data for Analysis:
-You will be provided with a JSON object representing the final, merged dataset. Here is the data:
 {data_json}"""
 
-        # Call Gemini API to generate the executive summary
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Call Gemini API with updated model
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(executive_summary_prompt)
         
         executive_summary = response.text.strip()
@@ -525,4 +661,151 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"\nError: {e}")
-        sys.exit(1) 
+        sys.exit(1)
+
+
+async def run_pipeline_with_progress(
+    job_id: str,
+    comments_file_path: str,
+    schedule_file_path: Optional[str] = None,
+    grades_file_path: Optional[str] = None,
+    question_col: str = "question",
+    answer_col: str = "response"
+) -> Dict[str, Any]:
+    """
+    Enhanced pipeline that sends progress updates via WebSocket.
+    This is the async version of run_pipeline for real-time tracking.
+    """
+    from app import progress_manager  # Import here to avoid circular imports
+    
+    try:
+        print("🚀 Starting pipeline with progress tracking...")
+        
+        # Load and validate environment
+        if not load_config():
+            raise Exception("Failed to load configuration")
+        
+        # === PHASE 0: DATA FORMATTING & CLEANING ===
+        await progress_manager.send_progress(job_id, "cleaning", "in_progress", "Loading and cleaning data...")
+        print("📊 Phase 0: Data Formatting & Cleaning")
+        
+        comments_df = pd.read_csv(comments_file_path)
+        print(f"✅ Loaded comments file: {len(comments_df)} rows")
+        
+        schedule_df = None
+        if schedule_file_path and os.path.exists(schedule_file_path):
+            schedule_df = pd.read_csv(schedule_file_path)
+            print(f"✅ Loaded schedule file: {len(schedule_df)} rows")
+        
+        grades_df = None
+        if grades_file_path and os.path.exists(grades_file_path):
+            grades_df = pd.read_csv(grades_file_path)
+            print(f"✅ Loaded grades file: {len(grades_df)} rows")
+        
+        # Format the data - just use the comments file path since format_data works with files
+        formatted_df = format_data(comments_file_path)
+        await progress_manager.send_progress(job_id, "cleaning", "complete", "Data formatting completed")
+        
+        # === PHASE 1: INITIAL CODING ===
+        await progress_manager.send_progress(job_id, "coding", "in_progress", "Generating AI-powered codes and sentiment analysis...")
+        print("🔥 Phase 1: Initial Coding with AI")
+        
+        # Apply initial coding using AI with real-time progress tracking
+        import math
+        import time
+        from main import get_codes_for_batch
+        
+        batch_size = 20
+        total_batches = math.ceil(len(formatted_df) / batch_size)
+        
+        print(f"Processing {len(formatted_df)} rows in {total_batches} batches of {batch_size}")
+        
+        all_codes = []
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min(start_idx + batch_size, len(formatted_df))
+            batch_df = formatted_df.iloc[start_idx:end_idx]
+            
+            # Send batch progress update in real-time
+            batch_percentage = int((batch_num / total_batches) * 100)
+            batch_message = f"Processing batch {batch_num + 1} of {total_batches} ({batch_percentage}%)"
+            await progress_manager.send_progress(job_id, "coding", "in_progress", batch_message)
+            print(f"Batch Progress: {batch_message}")
+            
+            # Process this batch
+            batch_codes = get_codes_for_batch(batch_df, question_col, answer_col)
+            all_codes.extend(batch_codes)
+            
+            # Small delay to avoid rate limits
+            time.sleep(0.5)
+        
+        # Send completion update
+        completion_message = f"Completed all {total_batches} batches (100%)"
+        await progress_manager.send_progress(job_id, "coding", "in_progress", completion_message)
+        print(f"Batch Progress: {completion_message}")
+        
+        # Create the coded DataFrame
+        analysis_df = pd.DataFrame(all_codes)
+        if not analysis_df.empty:
+            analysis_df = analysis_df.set_index('id')
+            coded_df = formatted_df.copy()
+            coded_df['Initial_Code'] = analysis_df['code']
+            coded_df['Sentiment'] = analysis_df['sentiment']
+        else:
+            coded_df = formatted_df.copy()
+            coded_df['Initial_Code'] = None
+            coded_df['Sentiment'] = None
+        await progress_manager.send_progress(job_id, "coding", "complete", "Initial coding completed")
+        
+        # === PHASE 2: THEMATIC ANALYSIS ===
+        await progress_manager.send_progress(job_id, "themes", "in_progress", "Synthesizing themes and generating insights...")
+        print("🎯 Phase 2: Thematic Analysis")
+        
+        # Generate themes
+        final_df, theme_report = analyze_themes(coded_df)
+        await progress_manager.send_progress(job_id, "themes", "complete", "Thematic analysis completed")
+        
+        # === PHASE 3: MERGING WITH ADDITIONAL DATA ===
+        validation_results = []
+        
+        if schedule_df is not None:
+            print("📅 Merging with schedule data...")
+            final_df, schedule_validation = merge_with_schedule(final_df, schedule_df)
+            validation_results.append({
+                "file_type": "schedule",
+                "result": schedule_validation
+            })
+        
+        if grades_df is not None:
+            print("📈 Merging with grades data...")
+            final_df, grades_validation = merge_with_grades(final_df, grades_df)
+            validation_results.append({
+                "file_type": "grades",
+                "result": grades_validation
+            })
+        
+        # Clean up final data for JSON serialization
+        final_df = clean_for_json_serialization(final_df)
+        
+        # === PHASE 4: EXECUTIVE SUMMARY ===
+        await progress_manager.send_progress(job_id, "summary", "in_progress", "Creating executive summary...")
+        print("📋 Phase 4: Executive Summary Generation")
+        
+        executive_summary = generate_executive_summary(final_df)
+        await progress_manager.send_progress(job_id, "summary", "complete", "Executive summary generated")
+        
+        print("✨ Pipeline completed successfully!")
+        
+        return {
+            "final_dataframe": final_df,
+            "markdown_report": theme_report,
+            "executive_summary": executive_summary,
+            "validation_results": validation_results,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        error_msg = f"Pipeline failed: {str(e)}"
+        print(f"❌ {error_msg}")
+        await progress_manager.send_progress(job_id, "error", "error", error_msg)
+        raise e 

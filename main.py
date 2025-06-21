@@ -190,7 +190,7 @@ Return your analysis as a JSON array:
         return []
 
 def process_csv_in_batches(df: pd.DataFrame, question_col: str, 
-                          answer_col: str, batch_size: int = BATCH_SIZE) -> pd.DataFrame:
+                          answer_col: str, batch_size: int = BATCH_SIZE, progress_callback=None) -> pd.DataFrame:
     """
     Process the entire DataFrame in batches and generate codes with sentiment analysis.
     
@@ -199,6 +199,7 @@ def process_csv_in_batches(df: pd.DataFrame, question_col: str,
         question_col (str): Name of the question column
         answer_col (str): Name of the answer column
         batch_size (int): Number of rows to process in each batch
+        progress_callback (callable): Optional callback function for progress updates
         
     Returns:
         pd.DataFrame: DataFrame with added 'Initial_Code' and 'Sentiment' columns
@@ -209,8 +210,13 @@ def process_csv_in_batches(df: pd.DataFrame, question_col: str,
     print(f"Processing {len(df)} rows in {total_batches} batches of {batch_size}")
     
     # Process in batches with progress bar
-    for i in tqdm(range(0, len(df), batch_size), desc="Processing batches"):
+    for batch_num, i in enumerate(tqdm(range(0, len(df), batch_size), desc="Processing batches")):
         batch_df = df.iloc[i:i+batch_size]
+        
+        # Send batch progress update if callback provided
+        if progress_callback:
+            batch_percentage = int((batch_num / total_batches) * 100)
+            progress_callback(f"Processing batch {batch_num + 1} of {total_batches} ({batch_percentage}%)")
         
         # Get codes for this batch
         batch_codes = get_codes_for_batch(batch_df, question_col, answer_col)
@@ -218,6 +224,10 @@ def process_csv_in_batches(df: pd.DataFrame, question_col: str,
         
         # Small delay to avoid rate limits
         time.sleep(0.5)
+    
+    # Send completion update if callback provided
+    if progress_callback:
+        progress_callback(f"Completed all {total_batches} batches (100%)")
     
     # Create DataFrame from analysis results
     analysis_df = pd.DataFrame(all_codes)
