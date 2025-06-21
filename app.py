@@ -264,6 +264,7 @@ async def run_analysis_with_paths(
         markdown_report = results["markdown_report"]
         executive_summary = results.get("executive_summary", "")
         validation_results = results.get("validation_results", [])
+        ai_analysis_memo = results.get("ai_analysis_memo", "")
         
         print(f"Pipeline completed. Final DataFrame shape: {final_df.shape}")
         
@@ -300,6 +301,7 @@ async def run_analysis_with_paths(
                 "dashboardData": dashboard_json,
                 "markdownReport": markdown_report,
                 "executiveSummary": executive_summary,
+                "aiAnalysisMemo": ai_analysis_memo,
                 "validationResults": validation_results
             }
         }
@@ -365,6 +367,7 @@ async def process_files_endpoint(
             markdown_report = results["markdown_report"]
             executive_summary = results.get("executive_summary", "")
             validation_results = results.get("validation_results", [])
+            ai_analysis_memo = results.get("ai_analysis_memo", "")
             
             print(f"Pipeline completed. Final DataFrame shape: {final_df.shape}")
             
@@ -397,6 +400,7 @@ async def process_files_endpoint(
                 "dashboardData": dashboard_json,
                 "markdownReport": markdown_report,
                 "executiveSummary": executive_summary,
+                "aiAnalysisMemo": ai_analysis_memo,
                 "validationResults": validation_results,
                 "metadata": {
                     "totalRows": len(final_df),

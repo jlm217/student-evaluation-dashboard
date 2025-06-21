@@ -5,6 +5,8 @@ AI-Assisted Qualitative Coding Agent
 This script automates the initial open-coding phase of qualitative data analysis
 using Google's Gemini API. It processes CSV files containing question-answer pairs
 and generates initial codes for each entry using batch processing for efficiency.
+
+Enhanced with Context-Aware Coding and Batch Summaries for improved consistency.
 """
 
 import os
@@ -14,12 +16,14 @@ import pandas as pd
 import google.generativeai as genai
 from dotenv import load_dotenv
 from tqdm import tqdm
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Set
 
 # Constants
 BATCH_SIZE = 20
 DEFAULT_QUESTION_COL = "question"
 DEFAULT_ANSWER_COL = "answer"
+CONTEXT_MEMORY_THRESHOLD = 30  # Start including context when we have 30+ codes
+CONTEXT_SAMPLE_SIZE = 25  # Include 20-30 recent codes in context
 
 def load_config() -> bool:
     """
@@ -94,18 +98,20 @@ def load_csv_data(file_path: str, question_col: str = DEFAULT_QUESTION_COL,
         print(f"Error loading CSV file: {e}")
         return None
 
-def get_codes_for_batch(batch_df: pd.DataFrame, question_col: str, 
-                       answer_col: str) -> List[Dict[str, Any]]:
+def get_codes_for_batch_with_context(batch_df: pd.DataFrame, question_col: str, 
+                                   answer_col: str, context_codes: List[str] = None) -> Dict[str, Any]:
     """
-    Generate codes and sentiment analysis for a batch of question-answer pairs using Gemini API.
+    Generate codes and sentiment analysis for a batch of question-answer pairs using Gemini API,
+    with optional context from previously generated codes.
     
     Args:
         batch_df (pd.DataFrame): DataFrame chunk containing the batch
         question_col (str): Name of the question column
         answer_col (str): Name of the answer column
+        context_codes (List[str], optional): List of recently generated codes for context
         
     Returns:
-        List[Dict]: List of analysis objects with 'id', 'code', and 'sentiment' keys
+        Dict: Dictionary with 'analysis' (list of analysis objects) and 'batch_summary' (str)
     """
     try:
         # Convert batch to list of dictionaries
@@ -117,15 +123,29 @@ def get_codes_for_batch(batch_df: pd.DataFrame, question_col: str,
                 "answer": str(row[answer_col])
             })
         
-        # Construct the refined batch prompt
-        prompt = """You are an expert qualitative research assistant. Your task is to perform open coding for grounded theory analysis on student feedback.
+        # Build context section if codes are provided
+        context_section = ""
+        if context_codes and len(context_codes) >= CONTEXT_MEMORY_THRESHOLD:
+            recent_codes = context_codes[-CONTEXT_SAMPLE_SIZE:]  # Get most recent codes
+            context_section = f"""
+**CONTEXT - Recently Used Codes:**
+Here are codes you have used recently in this analysis session: {', '.join(f'"{code}"' for code in recent_codes)}
+
+**IMPORTANT:** Before creating a new code, check whether one of these existing codes accurately represents the response. Prioritize reuse of existing codes when they fit. Only create a new code when none of the existing codes accurately capture the essence of the response.
+"""
+        
+        # Construct the enhanced batch prompt with context awareness
+        prompt = f"""You are an expert qualitative research assistant. Your task is to perform open coding for grounded theory analysis on student feedback.
 
 Your goal is to generate a brief, informative initial code (3-6 words) that captures the central theme of each student's response. You must also determine the sentiment of each response.
-
+{context_section}
 **Instructions:**
-1.  **Distill the Essence:** For long responses with multiple points, distill the answer to its single most important underlying issue or idea. Do not just summarize one part of it.
-2.  **Be Direct:** For very short or simple answers, provide a straightforward code.
-3.  **Format:** Return your analysis as a JSON array where each object has three keys: "id" (matching the input), "code" (3-6 words), and "sentiment" (values: "Positive", "Negative", "Neutral").
+1. **Distill the Essence:** For long responses with multiple points, distill the answer to its single most important underlying issue or idea. Do not just summarize one part of it.
+2. **Be Direct:** For very short or simple answers, provide a straightforward code.
+3. **Consistency Priority:** {"If context codes are provided above, prioritize reusing an existing code that accurately fits the response rather than creating a new variant." if context_codes else ""}
+4. **Format:** Return your analysis as a JSON object with two parts:
+   - "analysis": Array where each object has three keys: "id" (matching the input), "code" (3-6 words), and "sentiment" (values: "Positive", "Negative", "Neutral")
+   - "batch_summary": A single sentence summarizing the key concepts or themes found in this batch
 
 **Examples of Correct Analysis:**
 
@@ -134,30 +154,30 @@ Your goal is to generate a brief, informative initial code (3-6 words) that capt
 * **Question:** What did you like the least about the course?
 * **Answer:** nothing, i love it.
 * **Analysis:**
-    {
+    {{
       "id": 0,
       "code": "Positive Overall Feedback",
       "sentiment": "Positive"
-    }
+    }}
 
 ---
 **Example 2:**
 * **Question:** What did you like the least about the course?
 * **Answer:** The teacher is never present in any of the videos, nor does she seem to prioritize our success or concerns...
 * **Analysis:**
-    {
+    {{
       "id": 1,
       "code": "Lack of Instructor Feedback/Support",
       "sentiment": "Negative"
-    }
+    }}
 ---
 
 **Now, perform the analysis on the following data:**
 
 Input:
-""" + json.dumps(batch_data, indent=2) + """
+{json.dumps(batch_data, indent=2)}
 
-Return your analysis as a JSON array:
+Return your analysis as a JSON object with both "analysis" array and "batch_summary" string:
 
 ```json"""
         
@@ -176,23 +196,104 @@ Return your analysis as a JSON array:
         response_text = response_text.strip()
         
         # Parse JSON
-        analysis_results = json.loads(response_text)
+        result = json.loads(response_text)
+        
+        # Validate response structure
+        if not isinstance(result, dict) or 'analysis' not in result:
+            print("Warning: Unexpected response format, attempting to parse as legacy format")
+            # Try to parse as legacy format (direct array)
+            if isinstance(result, list):
+                return {
+                    'analysis': result,
+                    'batch_summary': "Batch processed successfully"
+                }
+            else:
+                raise ValueError("Invalid response format")
+        
+        analysis_results = result.get('analysis', [])
+        batch_summary = result.get('batch_summary', "Batch processed successfully")
         
         print(f"✓ Generated codes and sentiment analysis for {len(analysis_results)} items")
-        return analysis_results
+        print(f"✓ Batch summary: {batch_summary}")
+        
+        return {
+            'analysis': analysis_results,
+            'batch_summary': batch_summary
+        }
         
     except json.JSONDecodeError as e:
         print(f"Error parsing JSON response: {e}")
         print(f"Response text: {response_text}")
-        return []
+        return {
+            'analysis': [],
+            'batch_summary': "Error processing batch"
+        }
     except Exception as e:
         print(f"Error generating analysis for batch: {e}")
-        return []
+        return {
+            'analysis': [],
+            'batch_summary': "Error processing batch"
+        }
 
-def process_csv_in_batches(df: pd.DataFrame, question_col: str, 
-                          answer_col: str, batch_size: int = BATCH_SIZE, progress_callback=None) -> pd.DataFrame:
+def get_codes_for_batch(batch_df: pd.DataFrame, question_col: str, 
+                       answer_col: str) -> List[Dict[str, Any]]:
     """
-    Process the entire DataFrame in batches and generate codes with sentiment analysis.
+    Legacy function wrapper for backward compatibility.
+    Generate codes and sentiment analysis for a batch without context.
+    
+    Args:
+        batch_df (pd.DataFrame): DataFrame chunk containing the batch
+        question_col (str): Name of the question column
+        answer_col (str): Name of the answer column
+        
+    Returns:
+        List[Dict]: List of analysis objects with 'id', 'code', and 'sentiment' keys
+    """
+    result = get_codes_for_batch_with_context(batch_df, question_col, answer_col)
+    return result['analysis']
+
+def update_context_memory(recently_generated_codes: List[str], new_codes: List[str], 
+                         max_memory_size: int = 100) -> List[str]:
+    """
+    Update the context memory with new codes, maintaining deduplication and size limits.
+    
+    Args:
+        recently_generated_codes (List[str]): Current list of recent codes
+        new_codes (List[str]): New codes to add
+        max_memory_size (int): Maximum number of codes to keep in memory
+        
+    Returns:
+        List[str]: Updated list of recent codes
+    """
+    # Convert to set for deduplication, then back to list to preserve order
+    seen = set()
+    updated_codes = []
+    
+    # Add existing codes (in order)
+    for code in recently_generated_codes:
+        if code not in seen:
+            updated_codes.append(code)
+            seen.add(code)
+    
+    # Add new codes
+    for code in new_codes:
+        if code and code not in seen:  # Skip None/empty codes
+            updated_codes.append(code)
+            seen.add(code)
+    
+    # Limit size to prevent token bloat
+    if len(updated_codes) > max_memory_size:
+        updated_codes = updated_codes[-max_memory_size:]
+    
+    return updated_codes
+
+def process_csv_in_batches_with_context(df: pd.DataFrame, question_col: str, 
+                                      answer_col: str, batch_size: int = BATCH_SIZE, 
+                                      progress_callback: Optional[Callable[[str], None]] = None,
+                                      summary_callback: Optional[Callable[[str], None]] = None) -> pd.DataFrame:
+    """
+    Process the entire DataFrame in batches with context-aware coding and generate codes with sentiment analysis.
+    Enhanced with context memory and batch summaries.
     
     Args:
         df (pd.DataFrame): Input DataFrame
@@ -200,14 +301,17 @@ def process_csv_in_batches(df: pd.DataFrame, question_col: str,
         answer_col (str): Name of the answer column
         batch_size (int): Number of rows to process in each batch
         progress_callback (callable): Optional callback function for progress updates
+        summary_callback (callable): Optional callback function for batch summaries
         
     Returns:
         pd.DataFrame: DataFrame with added 'Initial_Code' and 'Sentiment' columns
     """
     all_codes = []
+    recently_generated_codes = []  # Context memory
     total_batches = (len(df) + batch_size - 1) // batch_size
     
     print(f"Processing {len(df)} rows in {total_batches} batches of {batch_size}")
+    print(f"Context-aware coding enabled (threshold: {CONTEXT_MEMORY_THRESHOLD} codes)")
     
     # Process in batches with progress bar
     for batch_num, i in enumerate(tqdm(range(0, len(df), batch_size), desc="Processing batches")):
@@ -218,9 +322,29 @@ def process_csv_in_batches(df: pd.DataFrame, question_col: str,
             batch_percentage = int((batch_num / total_batches) * 100)
             progress_callback(f"Processing batch {batch_num + 1} of {total_batches} ({batch_percentage}%)")
         
-        # Get codes for this batch
-        batch_codes = get_codes_for_batch(batch_df, question_col, answer_col)
+        # Determine whether to use context
+        use_context = len(recently_generated_codes) >= CONTEXT_MEMORY_THRESHOLD
+        context_codes = recently_generated_codes if use_context else None
+        
+        if use_context:
+            print(f"  Using context memory ({len(recently_generated_codes)} codes available)")
+        
+        # Get codes for this batch with context
+        batch_result = get_codes_for_batch_with_context(batch_df, question_col, answer_col, context_codes)
+        batch_codes = batch_result['analysis']
+        batch_summary = batch_result['batch_summary']
+        
+        # Send batch summary if callback provided
+        if summary_callback and batch_summary:
+            summary_callback(batch_summary)
+        
         all_codes.extend(batch_codes)
+        
+        # Update context memory with new codes
+        new_codes = [item.get('code') for item in batch_codes if item.get('code')]
+        recently_generated_codes = update_context_memory(recently_generated_codes, new_codes)
+        
+        print(f"  Batch {batch_num + 1}: Generated {len(batch_codes)} codes, memory size: {len(recently_generated_codes)}")
         
         # Small delay to avoid rate limits
         time.sleep(0.5)
@@ -228,6 +352,16 @@ def process_csv_in_batches(df: pd.DataFrame, question_col: str,
     # Send completion update if callback provided
     if progress_callback:
         progress_callback(f"Completed all {total_batches} batches (100%)")
+    
+    # Final context memory stats
+    unique_codes = len(set(recently_generated_codes))
+    total_comments = len(df)
+    uniqueness_percentage = (unique_codes / total_comments) * 100 if total_comments > 0 else 0
+    
+    print(f"✓ Context-aware coding completed:")
+    print(f"  Total comments: {total_comments}")
+    print(f"  Unique codes generated: {unique_codes}")
+    print(f"  Code uniqueness: {uniqueness_percentage:.1f}% (target: ≤40%)")
     
     # Create DataFrame from analysis results
     analysis_df = pd.DataFrame(all_codes)
@@ -244,6 +378,24 @@ def process_csv_in_batches(df: pd.DataFrame, question_col: str,
         result_df['Sentiment'] = None
     
     return result_df
+
+def process_csv_in_batches(df: pd.DataFrame, question_col: str, 
+                          answer_col: str, batch_size: int = BATCH_SIZE, progress_callback=None) -> pd.DataFrame:
+    """
+    Legacy wrapper function for backward compatibility.
+    Process the entire DataFrame in batches and generate codes with sentiment analysis.
+    
+    Args:
+        df (pd.DataFrame): Input DataFrame
+        question_col (str): Name of the question column
+        answer_col (str): Name of the answer column
+        batch_size (int): Number of rows to process in each batch
+        progress_callback (callable): Optional callback function for progress updates
+        
+    Returns:
+        pd.DataFrame: DataFrame with added 'Initial_Code' and 'Sentiment' columns
+    """
+    return process_csv_in_batches_with_context(df, question_col, answer_col, batch_size, progress_callback)
 
 def save_output_csv(df: pd.DataFrame, input_file_path: str) -> str:
     """

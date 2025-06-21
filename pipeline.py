@@ -514,7 +514,9 @@ def run_pipeline(
     print("\n🎯 PHASE 2: THEMATIC ANALYSIS")
     print("-" * 50)
     
-    final_df, markdown_report = analyze_themes(coded_df)
+    final_df, markdown_report, themes_data = analyze_themes(coded_df)
+    ai_memo = themes_data.get('memo', '') if themes_data else ''
+    ai_analysis_memo = themes_data.get('ai_analysis_memo', '') if themes_data else ''
     print(f"✅ Phase 2 Complete: Themed data has {len(final_df)} rows.")
 
     # Phase 3: Merge with other data sources
@@ -579,7 +581,9 @@ def run_pipeline(
         "final_dataframe": final_df,
         "markdown_report": markdown_report,
         "executive_summary": executive_summary,
-        "validation_results": validation_results
+        "validation_results": validation_results,
+        "ai_analysis_memo": ai_analysis_memo,
+        "status": "success"
     }
 
 
@@ -710,17 +714,20 @@ async def run_pipeline_with_progress(
         await progress_manager.send_progress(job_id, "coding", "in_progress", "Generating AI-powered codes and sentiment analysis...")
         print("🔥 Phase 1: Initial Coding with AI")
         
-        # Apply initial coding using AI with real-time progress tracking
+        # Apply context-aware initial coding using AI with real-time progress and batch summaries
         import math
         import time
-        from main import get_codes_for_batch
+        from main import get_codes_for_batch_with_context, update_context_memory, CONTEXT_MEMORY_THRESHOLD
         
         batch_size = 20
         total_batches = math.ceil(len(formatted_df) / batch_size)
         
         print(f"Processing {len(formatted_df)} rows in {total_batches} batches of {batch_size}")
+        print(f"Context-aware coding enabled (threshold: {CONTEXT_MEMORY_THRESHOLD} codes)")
         
         all_codes = []
+        recently_generated_codes = []  # Context memory for consistent coding
+        
         for batch_num in range(total_batches):
             start_idx = batch_num * batch_size
             end_idx = min(start_idx + batch_size, len(formatted_df))
@@ -732,15 +739,41 @@ async def run_pipeline_with_progress(
             await progress_manager.send_progress(job_id, "coding", "in_progress", batch_message)
             print(f"Batch Progress: {batch_message}")
             
-            # Process this batch
-            batch_codes = get_codes_for_batch(batch_df, question_col, answer_col)
+            # Determine whether to use context
+            use_context = len(recently_generated_codes) >= CONTEXT_MEMORY_THRESHOLD
+            context_codes = recently_generated_codes if use_context else None
+            
+            if use_context:
+                print(f"  Using context memory ({len(recently_generated_codes)} codes available)")
+            
+            # Process this batch with context awareness
+            batch_result = get_codes_for_batch_with_context(batch_df, question_col, answer_col, context_codes)
+            batch_codes = batch_result['analysis']
+            batch_summary = batch_result['batch_summary']
+            
+            # Stream batch summary to frontend (ephemeral UI update)
+            if batch_summary:
+                summary_message = f"💭 {batch_summary}"
+                await progress_manager.send_progress(job_id, "coding", "batch_summary", summary_message)
+                print(f"Batch Summary: {batch_summary}")
+            
             all_codes.extend(batch_codes)
+            
+            # Update context memory with new codes for next batch
+            new_codes = [item.get('code') for item in batch_codes if item.get('code')]
+            recently_generated_codes = update_context_memory(recently_generated_codes, new_codes)
+            
+            print(f"  Batch {batch_num + 1}: Generated {len(batch_codes)} codes, memory size: {len(recently_generated_codes)}")
             
             # Small delay to avoid rate limits
             time.sleep(0.5)
         
-        # Send completion update
-        completion_message = f"Completed all {total_batches} batches (100%)"
+        # Send completion update with final stats
+        unique_codes = len(set(recently_generated_codes))
+        total_comments = len(formatted_df)
+        uniqueness_percentage = (unique_codes / total_comments) * 100 if total_comments > 0 else 0
+        
+        completion_message = f"Completed all {total_batches} batches - {unique_codes} unique codes generated ({uniqueness_percentage:.1f}% uniqueness)"
         await progress_manager.send_progress(job_id, "coding", "in_progress", completion_message)
         print(f"Batch Progress: {completion_message}")
         
@@ -761,9 +794,11 @@ async def run_pipeline_with_progress(
         await progress_manager.send_progress(job_id, "themes", "in_progress", "Synthesizing themes and generating insights...")
         print("🎯 Phase 2: Thematic Analysis")
         
-        # Generate themes
-        final_df, theme_report = analyze_themes(coded_df)
-        await progress_manager.send_progress(job_id, "themes", "complete", "Thematic analysis completed")
+        # Generate themes with enhanced methodology
+        final_df, markdown_report, themes_data = analyze_themes(coded_df, job_id=job_id)
+        ai_memo = themes_data.get('memo', '') if themes_data else ''
+        ai_analysis_memo = themes_data.get('ai_analysis_memo', '') if themes_data else ''
+        await progress_manager.send_progress(job_id, "themes", "complete", "Methodologically-aligned thematic analysis completed")
         
         # === PHASE 3: MERGING WITH ADDITIONAL DATA ===
         validation_results = []
@@ -798,9 +833,10 @@ async def run_pipeline_with_progress(
         
         return {
             "final_dataframe": final_df,
-            "markdown_report": theme_report,
+            "markdown_report": markdown_report,
             "executive_summary": executive_summary,
             "validation_results": validation_results,
+            "ai_analysis_memo": ai_analysis_memo,
             "status": "success"
         }
         
