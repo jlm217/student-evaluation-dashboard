@@ -23,6 +23,7 @@ import google.generativeai as genai
 from formatter import format_data
 from main import process_csv_in_batches, load_config
 from thematic_analyzer import analyze_themes
+from data_cleaner import clean_likert_file, analyze_response_rates, enhance_likert_analysis_with_response_rates
 import asyncio
 
 
@@ -281,19 +282,21 @@ def clean_for_json_serialization(df: pd.DataFrame) -> pd.DataFrame:
     return clean_df
 
 
-def create_hybrid_summary_json(final_df: pd.DataFrame) -> dict:
+def create_hybrid_summary_json(final_df: pd.DataFrame, likert_analysis: Optional[Dict[str, Any]] = None) -> dict:
     """
     Create a hybrid JSON payload that efficiently combines qualitative and quantitative data.
     
     This function implements the PRD strategy of separating:
     1. qualitative_data: ALL comment records with essential columns
     2. quantitative_summary: Aggregated section-level data (unique sections only)
+    3. likert_summary: Quantitative survey benchmarks per section (if available)
     
     Args:
         final_df (pd.DataFrame): Final merged DataFrame with all analysis data
+        likert_analysis (Dict[str, Any], optional): Results from analyze_quantitative_questions()
         
     Returns:
-        dict: Hybrid JSON object with qualitative_data and quantitative_summary
+        dict: Hybrid JSON object with qualitative_data and quantitative_summary (with likert_summary)
     """
     print("📊 Creating hybrid summary JSON payload...")
     
@@ -382,6 +385,75 @@ def create_hybrid_summary_json(final_df: pd.DataFrame) -> dict:
             dew_count = grade_distribution.get('D', 0) + grade_distribution.get('E', 0) + grade_distribution.get('W', 0)
             dew_rate = (dew_count / total_graded * 100) if total_graded > 0 else 0
             
+            # Add Likert survey analysis if available
+            if likert_analysis and 'sections' in likert_analysis:
+                section_id = int(section['SectionNumber_ASU']) if pd.notna(section['SectionNumber_ASU']) else None
+                
+                if section_id in likert_analysis['sections']:
+                    likert_section_data = likert_analysis['sections'][section_id]
+                    
+                    # Create summarized Likert data for this section
+                    likert_summary = {
+                        'total_students_surveyed': likert_section_data['total_students'],
+                        'questions_answered': likert_section_data['questions_answered'],
+                        'key_metrics': {}
+                    }
+                    
+                    # Add top performance metrics (questions with notable deviations)
+                    questions_data = likert_section_data.get('questions', {})
+                    notable_questions = []
+                    
+                    for question_key, q_data in questions_data.items():
+                        deviation = q_data.get('deviation')
+                        performance_tier = q_data.get('performance_tier', 'unknown')
+                        
+                        # Include questions with significant deviations or interesting patterns
+                        if deviation is not None and (abs(deviation) > 0.3 or performance_tier != 'average'):
+                            # Get question text from metadata if available
+                            question_text = q_data.get('question_text')
+                            if not question_text and likert_analysis and 'question_metadata' in likert_analysis:
+                                question_text = likert_analysis['question_metadata'].get(question_key, {}).get('question_text')
+                            
+                            # Fallback to formatted key if no question text available
+                            if not question_text:
+                                question_text = question_key.replace('q_', '').replace('_', ' ').title()
+                            
+                            notable_questions.append({
+                                'question_key': question_key,
+                                'question_text': question_text,
+                                'section_score': q_data['this_section_score'],
+                                'peer_average': q_data['peer_group_average'],
+                                'deviation': deviation,
+                                'performance_tier': performance_tier,
+                                'student_count': q_data['student_count']
+                            })
+                    
+                    # Sort by absolute deviation (most significant first)
+                    notable_questions.sort(key=lambda x: abs(x['deviation']), reverse=True)
+                    
+                    # Keep top 5 most notable questions to avoid payload bloat
+                    likert_summary['notable_questions'] = notable_questions[:5]
+                    
+                    # Add summary statistics
+                    if notable_questions:
+                        avg_deviation = sum(abs(q['deviation']) for q in notable_questions) / len(notable_questions)
+                        likert_summary['key_metrics'] = {
+                            'average_deviation_magnitude': round(avg_deviation, 2),
+                            'above_average_count': len([q for q in notable_questions if q['performance_tier'] == 'above_average']),
+                            'below_average_count': len([q for q in notable_questions if q['performance_tier'] == 'below_average'])
+                        }
+                    
+                    section_data['likert_summary'] = likert_summary
+                else:
+                    # Section exists in academic data but not in Likert data
+                    section_data['likert_summary'] = {
+                        'total_students_surveyed': 0,
+                        'questions_answered': 0,
+                        'key_metrics': {},
+                        'notable_questions': [],
+                        'note': 'No quantitative survey data available for this section'
+                    }
+            
             section_data['DEW_Rate_Percent'] = round(dew_rate, 1)
             section_data['Grade_Distribution'] = grade_distribution
             
@@ -402,15 +474,16 @@ def create_hybrid_summary_json(final_df: pd.DataFrame) -> dict:
     return hybrid_payload
 
 
-def generate_executive_summary(final_df: pd.DataFrame) -> str:
+def generate_executive_summary(final_df: pd.DataFrame, likert_analysis: Optional[Dict[str, Any]] = None) -> str:
     """
-    Generate an executive summary using the hybrid data model approach.
+    Generate an executive summary using the hybrid data model approach with optional quantitative survey integration.
     
     Uses create_hybrid_summary_json to create a token-efficient payload that combines
-    all qualitative data with aggregated quantitative data.
+    all qualitative data with aggregated quantitative data and Likert survey benchmarks.
     
     Args:
         final_df (pd.DataFrame): Final merged DataFrame with all analysis data
+        likert_analysis (Dict[str, Any], optional): Results from analyze_quantitative_questions()
         
     Returns:
         str: Executive summary as markdown text
@@ -419,39 +492,62 @@ def generate_executive_summary(final_df: pd.DataFrame) -> str:
         print("\n📝 PHASE 4: EXECUTIVE SUMMARY GENERATION")
         print("-" * 50)
         
-        # Phase 2.1: Create hybrid summary JSON
-        hybrid_data = create_hybrid_summary_json(final_df)
+        # Phase 2.1: Create hybrid summary JSON with Likert integration
+        hybrid_data = create_hybrid_summary_json(final_df, likert_analysis)
         
         # Convert to JSON string for the prompt
         data_json = json.dumps(hybrid_data, indent=2, default=str)
         
         print(f"   📏 Payload size: ~{len(data_json):,} characters")
         
-        # Create the updated executive summary prompt for hybrid data
-        executive_summary_prompt = f"""Role: You are an expert educational data analyst and strategist.
+        # Enhanced executive summary prompt with quantitative survey integration
+        likert_instruction = ""
+        if likert_analysis:
+            likert_instruction = """
+3. Quantitative Survey Analysis: Each section may include 'likert_summary' data with:
+   - Student survey responses with peer group benchmarks
+   - Performance tiers (above_average/average/below_average compared to peer sections)
+   - Notable deviations from peer group averages
+   - Use this data to validate or contrast with qualitative themes
+   - **IMPORTANT**: When referencing survey questions, use the 'question_text' field (actual question text) instead of 'question_key' (variable names)
+"""
+        
+        executive_summary_prompt = f"""
+
+Role: You are an expert educational data analyst and strategist.
+
 Objective: Produce a concise, decision-ready executive summary that fuses student feedback (qualitative_data) with course performance metrics (quantitative_summary). The primary audience is a busy department head who needs key insights and next steps in ≤ 2 pages. Assume a team of experts will have great insight as the look closer at your observations. Your role is to spot important patterns and trends and recommed steps that point them in the right direction.
 
-Task: Analyze the provided hybrid JSON data and generate a structured report. The data contains two parts:
+Task: Analyze the provided hybrid JSON data and generate a structured report. The data contains:
 1. qualitative_data: Complete student feedback with themes and sentiment analysis
 2. quantitative_summary: Aggregated section-level performance metrics and grade distributions
+3. Quantitative Survey Analysis: Each section may include 'likert_summary' data with:
+   - Student survey responses with peer group benchmarks
+   - Performance tiers (above_average/average/below_average compared to peer sections)
+   - Notable deviations from peer group averages
+   - Use this data to validate or contrast with qualitative themes
+   - **IMPORTANT**: When referencing survey questions, use the 'question_text' field (actual question text) instead of 'question_key' (variable names)
 
 Instructions:
-1. Analyze Holistically: Review both qualitative feedback and quantitative data to understand correlations and patterns.
-2. Compose Report (markdown): Generate the report in markdown format with the following sections (your response should start at the Overall Summary):
-    * ### Overall Summary: A brief, top-level paragraph summarizing the most significant findings from both qualitative and quantitative data.
-    * ### Key Strengths: 2–3 bullets, each containing: theme name, prevalence, use specific student question and response quotes, and supporting DEW or grade data.
-    * ### Areas for Improvement: Identify the 2-3 most critical areas needing attention. Consider negative-sentiment themes and high DEW rates as evidence. Quote specific, illustrative comments and cite relevant performance metrics.
-    * ### Patterns and Comparisons: 3–5 sentences (or a mini-table) noting instructor, mode, or section contrasts. For example:
-        * Do sections with positive feedback themes also show better grade distributions?
-        * Is there a correlation between instructor performance (DEW rates) and student sentiment?
-        * Does student feedback differ by modaility (Online vs In-Person) and does this correlate with academic outcomes?
-        * Are there specific themes that correlate with higher or lower student success rates?
-    * ### Actionable Recommendations: Based on your analysis, suggest 2-3 concrete, actionable steps supported by both student comments and performance data.
-Format & tone: Neutral, student-centric, evidence-first; avoid jargon; bold themes when used; attibute quote in text citation; use section-level end notes for other citations; total length ≈ 400–600 words.
+1. Analyze Holistically: Review qualitative feedback, quantitative data, and quantitative survey results to understand correlations and patterns.
+2. Look for Convergent Evidence: Where qualitative themes align with (or contradict) quantitative survey scores and academic performance.
+3. **When referencing survey questions**: Always use the actual question text from the 'question_text' field, never the technical 'question_key' variables.
+4. Compose Report (markdown): Generate the report in markdown format with the following sections. For each point being made in this report the typical structure should include a clear articulatulation of the point or main idea, reference to direct supporting evidence, and then implication for student learning/success. Your response should start at the Overall Summary:
+    * ### Overall Summary: A brief, top-level paragraph summarizing the most significant findings from all data sources.
+    * ### Key Strengths: 2–3 bullets, each containing: theme name, prevalence, use specific student question and response quotes, and supporting DEW or grade data. Include quantitative survey validation where available using actual question text.
+    * ### Areas for Improvement: Identify the 2-3 most critical areas needing attention. Consider negative-sentiment themes, high DEW rates, and below-average survey scores as convergent evidence. Quote specific comments and cite relevant performance metrics. Use actual question text when referencing surveys.
+    * ### Patterns and Comparisons: 3–5 sentences noting instructor, mode, or section contrasts. For example:
+        * Do sections with positive feedback themes also show better grade distributions AND higher survey scores?
+        * Is there correlation between instructor performance (DEW rates), student sentiment, AND quantitative survey ratings?
+        * Does student feedback differ by modality and does this correlate with both academic outcomes AND survey responses?
+        * Are there specific themes that correlate with higher or lower student success rates AND survey satisfaction?
+    * ### Actionable Recommendations: Based on convergent evidence from all data sources, suggest 2-3 concrete, actionable steps supported by student comments, performance data, and survey benchmarks.
+
+Format & tone: Neutral, student-centric, based in the evidence you have been provided; bold themes when used; When referring to specific section, use the Instruction_Mode to identify the course, (eg Smith’s In Person section; or a student from an Jones’ Online section); total length ≈ 400–600 words.
 
 Data Structure:
 - qualitative_data: Array of student feedback records with crs_number, SectionNumber_ASU, Instructor, Instruction_Mode, Term, question, response, Theme, Sentiment
-- quantitative_summary: Array of section performance records with SectionNumber_ASU, Instructor, Instruction_Mode, Term, Total_Enrollment, DEW_Rate_Percent, Grade_Distribution
+- quantitative_summary: Array of section performance records with SectionNumber_ASU, Instructor, Instruction_Mode, Term, Total_Enrollment, DEW_Rate_Percent, Grade_Distribution, and optional likert_summary with notable_questions containing both 'question_key' (technical variable) and 'question_text' (actual question text - USE THIS)
 
 Data for Analysis:
 {data_json}"""
@@ -470,25 +566,192 @@ Data for Analysis:
         return "## Executive Summary\n\nExecutive summary generation is currently unavailable. Please refer to the thematic analysis above for key insights."
 
 
+def analyze_quantitative_questions(cleaned_likert_df: pd.DataFrame, question_metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Analyze quantitative survey questions to create peer group benchmarks.
+    
+    This function implements the core peer group benchmarking logic:
+    1. For each question, identifies all sections that were asked that question
+    2. Calculates peer group averages across all students in that group
+    3. Calculates section-specific averages and response distributions
+    4. Provides comparison metrics (how far above/below peer average)
+    
+    Args:
+        cleaned_likert_df (pd.DataFrame): Wide-format Likert data from clean_likert_file()
+        question_metadata (Dict[str, Any], optional): Question metadata with text and response labels
+        
+    Returns:
+        Dict[str, Any]: Analysis results structured as:
+            {
+                'peer_group_averages': {question_key: average_score, ...},
+                'question_metadata': {question_key: {question_text, response_labels}, ...},
+                'sections': {
+                    section_id: {
+                        'questions': {
+                            question_key: {
+                                'question_text': str,
+                                'response_labels': Dict[str, str],
+                                'this_section_score': float,
+                                'peer_group_average': float,
+                                'deviation': float,  # this_section - peer_group
+                                'response_distribution': {score: count, ...},
+                                'student_count': int,
+                                'performance_tier': str  # 'above_average', 'average', 'below_average'
+                            }
+                        }
+                    }
+                }
+            }
+    """
+    print("🎯 Analyzing quantitative questions and creating peer group benchmarks...")
+    
+    if cleaned_likert_df.empty:
+        print("   ⚠️  No Likert data available for analysis")
+        return {
+            'peer_group_averages': {},
+            'question_metadata': question_metadata or {},
+            'sections': {}
+        }
+    
+    # Get all question columns (those starting with 'q_')
+    question_columns = [col for col in cleaned_likert_df.columns if col.startswith('q_')]
+    
+    if not question_columns:
+        print("   ⚠️  No question columns found in Likert data")
+        return {
+            'peer_group_averages': {},
+            'question_metadata': question_metadata or {},
+            'sections': {}
+        }
+    
+    print(f"   Found {len(question_columns)} unique questions to analyze")
+    
+    # Step 1: Calculate peer group averages for each question
+    print("   📊 Calculating peer group averages...")
+    peer_group_averages = {}
+    
+    for question_col in question_columns:
+        # Filter out missing responses (-1) and calculate mean
+        valid_responses = cleaned_likert_df[cleaned_likert_df[question_col] >= 0][question_col]
+        
+        if len(valid_responses) > 0:
+            peer_avg = valid_responses.mean()
+            peer_group_averages[question_col] = round(peer_avg, 2)
+            print(f"      {question_col}: {peer_avg:.2f} (n={len(valid_responses)})")
+        else:
+            peer_group_averages[question_col] = None
+            print(f"      {question_col}: No valid responses")
+    
+    # Step 2: Section-level analysis
+    print("   🏫 Analyzing individual sections...")
+    sections_analysis = {}
+    
+    # Group by section
+    section_groups = cleaned_likert_df.groupby('SectionNumber_ASU')
+    
+    for section_id, section_data in section_groups:
+        section_id = int(section_id)  # Ensure consistent type
+        print(f"      Section {section_id}: {len(section_data)} students")
+        
+        section_questions = {}
+        
+        for question_col in question_columns:
+            # Get valid responses for this question in this section
+            valid_responses = section_data[section_data[question_col] >= 0][question_col]
+            
+            if len(valid_responses) == 0:
+                # This section wasn't asked this question
+                continue
+            
+            # Calculate section-specific metrics
+            this_section_score = valid_responses.mean()
+            peer_group_average = peer_group_averages[question_col]
+            
+            if peer_group_average is not None:
+                deviation = this_section_score - peer_group_average
+                
+                # Determine performance tier
+                if deviation > 0.5:
+                    performance_tier = 'above_average'
+                elif deviation < -0.5:
+                    performance_tier = 'below_average'
+                else:
+                    performance_tier = 'average'
+            else:
+                deviation = None
+                performance_tier = 'unknown'
+            
+            # Calculate response distribution
+            response_distribution = valid_responses.value_counts().to_dict()
+            
+            # Get question metadata if available
+            question_text = None
+            response_labels = None
+            if question_metadata and question_col in question_metadata:
+                question_text = question_metadata[question_col]['question_text']
+                response_labels = question_metadata[question_col]['response_labels']
+            
+            section_questions[question_col] = {
+                'question_text': question_text,
+                'response_labels': response_labels,
+                'this_section_score': round(this_section_score, 2),
+                'peer_group_average': peer_group_average,
+                'deviation': round(deviation, 2) if deviation is not None else None,
+                'response_distribution': response_distribution,
+                'student_count': len(valid_responses),
+                'performance_tier': performance_tier
+            }
+        
+        sections_analysis[section_id] = {
+            'questions': section_questions,
+            'total_students': len(section_data),
+            'questions_answered': len(section_questions)
+        }
+    
+    # Step 3: Generate summary statistics
+    total_sections = len(sections_analysis)
+    total_questions_analyzed = len([q for q in peer_group_averages.values() if q is not None])
+    
+    print(f"   ✅ Analysis complete:")
+    print(f"      - {total_sections} sections analyzed")
+    print(f"      - {total_questions_analyzed} questions with valid data")
+    print(f"      - {len(cleaned_likert_df)} total student responses")
+    
+    return {
+        'peer_group_averages': peer_group_averages,
+        'question_metadata': question_metadata or {},
+        'sections': sections_analysis,
+        'summary': {
+            'total_sections': total_sections,
+            'total_questions': len(question_columns),
+            'questions_with_data': total_questions_analyzed,
+            'total_student_responses': len(cleaned_likert_df)
+        }
+    }
+
+
 def run_pipeline(
     comments_file_path: str,
     schedule_file_path: Optional[str] = None,
     grades_file_path: Optional[str] = None,
+    likert_file_path: Optional[str] = None,
     question_col: str = "question",
     answer_col: str = "response"
 ) -> Dict[str, Any]:
     """
-    Runs the entire analysis pipeline in-memory.
+    Runs the entire analysis pipeline in-memory with optional quantitative data integration.
 
     Args:
         comments_file_path (str): Path to comments file
         schedule_file_path (str, optional): Path to schedule file
         grades_file_path (str, optional): Path to grades file
+        likert_file_path (str, optional): Path to Likert survey data file
         question_col (str): Name of question column
         answer_col (str): Name of answer column
 
     Returns:
-        Dict[str, Any]: Dictionary containing the final DataFrame, markdown report, and executive summary
+        Dict[str, Any]: Dictionary containing the final DataFrame, markdown report, executive summary,
+                       and quantitative analysis results (if Likert data provided)
     """
     print("🚀 Starting robust in-memory pipeline...")
 
@@ -563,11 +826,64 @@ def run_pipeline(
                 }
             })
     
+    # Phase 3.5: Process Likert Survey Data (Quantitative Analysis)
+    likert_analysis = None
+    if likert_file_path and os.path.exists(likert_file_path):
+        try:
+            print("📊 Processing Likert survey data...")
+            cleaned_likert_df, question_metadata = clean_likert_file(likert_file_path)
+            
+            # Perform response rate analysis
+            response_analysis = analyze_response_rates(cleaned_likert_df)
+            
+            # Perform quantitative question analysis
+            likert_analysis = analyze_quantitative_questions(cleaned_likert_df, question_metadata)
+            
+            # Enhance Likert analysis with response rate information
+            likert_analysis = enhance_likert_analysis_with_response_rates(likert_analysis, response_analysis)
+            
+            validation_results.append({
+                "file_type": "likert",
+                "result": {
+                    "status": "success",
+                    "message": f"Successfully processed Likert data: {likert_analysis['summary']['total_sections']} sections, "
+                              f"{likert_analysis['summary']['questions_with_data']} questions analyzed, "
+                              f"{response_analysis.get('overall_stats', {}).get('total_unique_respondents', 0)} unique respondents",
+                    "type": "successful_processing",
+                    "details": {
+                        **likert_analysis['summary'],
+                        "response_rate_summary": response_analysis.get('overall_stats', {})
+                    }
+                }
+            })
+            print(f"✅ Likert analysis complete: {likert_analysis['summary']['total_sections']} sections analyzed")
+            
+        except Exception as e:
+            print(f"Warning: Failed to process Likert data: {e}")
+            validation_results.append({
+                "file_type": "likert", 
+                "result": {
+                    "status": "error",
+                    "message": f"Failed to process Likert data: {str(e)}",
+                    "type": "processing_error"
+                }
+            })
+    elif likert_file_path:
+        print(f"Warning: Likert file path provided but file not found: {likert_file_path}")
+        validation_results.append({
+            "file_type": "likert",
+            "result": {
+                "status": "error", 
+                "message": f"Likert file not found: {likert_file_path}",
+                "type": "file_not_found"
+            }
+        })
+    
     # Clean up final data for JSON serialization
     final_df = clean_for_json_serialization(final_df)
 
     # Phase 4: Generate Executive Summary
-    executive_summary = generate_executive_summary(final_df)
+    executive_summary = generate_executive_summary(final_df, likert_analysis)
 
     print("\n🎉 Pipeline finished successfully!")
     print(f"Final dataset: {len(final_df)} rows, {len(final_df.columns)} columns")
@@ -583,6 +899,7 @@ def run_pipeline(
         "executive_summary": executive_summary,
         "validation_results": validation_results,
         "ai_analysis_memo": ai_analysis_memo,
+        "likert_analysis": likert_analysis,
         "status": "success"
     }
 
@@ -611,7 +928,7 @@ def run_pipeline_legacy(input_file: str, skip_phase0: bool = False, skip_phase1:
     
     # For legacy mode, we'll run the new pipeline and save files
     try:
-        results = run_pipeline(input_file, None, None, question_col, answer_col)
+        results = run_pipeline(input_file, None, None, None, question_col, answer_col)
         
         # Save outputs for legacy compatibility
         final_df = results["final_dataframe"]
@@ -673,6 +990,7 @@ async def run_pipeline_with_progress(
     comments_file_path: str,
     schedule_file_path: Optional[str] = None,
     grades_file_path: Optional[str] = None,
+    likert_file_path: Optional[str] = None,
     question_col: str = "question",
     answer_col: str = "response"
 ) -> Dict[str, Any]:
@@ -819,14 +1137,56 @@ async def run_pipeline_with_progress(
                 "result": grades_validation
             })
         
-        # Clean up final data for JSON serialization
-        final_df = clean_for_json_serialization(final_df)
+        # Phase 3.5: Process Likert Survey Data (Quantitative Analysis)
+        likert_analysis = None
+        if likert_file_path and os.path.exists(likert_file_path):
+            try:
+                await progress_manager.send_progress(job_id, "quantitative", "in_progress", "Processing quantitative survey data...")
+                print("📊 Processing Likert survey data...")
+                cleaned_likert_df, question_metadata = clean_likert_file(likert_file_path)
+                
+                # Perform response rate analysis
+                response_analysis = analyze_response_rates(cleaned_likert_df)
+                
+                # Perform quantitative question analysis
+                likert_analysis = analyze_quantitative_questions(cleaned_likert_df, question_metadata)
+                
+                # Enhance Likert analysis with response rate information
+                likert_analysis = enhance_likert_analysis_with_response_rates(likert_analysis, response_analysis)
+                
+                validation_results.append({
+                    "file_type": "likert",
+                    "result": {
+                        "status": "success",
+                        "message": f"Successfully processed Likert data: {likert_analysis['summary']['total_sections']} sections, "
+                                  f"{likert_analysis['summary']['questions_with_data']} questions analyzed, "
+                                  f"{response_analysis.get('overall_stats', {}).get('total_unique_respondents', 0)} unique respondents",
+                        "type": "successful_processing",
+                        "details": {
+                            **likert_analysis['summary'],
+                            "response_rate_summary": response_analysis.get('overall_stats', {})
+                        }
+                    }
+                })
+                print(f"✅ Likert analysis complete: {likert_analysis['summary']['total_sections']} sections analyzed")
+                await progress_manager.send_progress(job_id, "quantitative", "complete", "Quantitative analysis completed")
+                
+            except Exception as e:
+                print(f"Warning: Failed to process Likert data: {e}")
+                validation_results.append({
+                    "file_type": "likert", 
+                    "result": {
+                        "status": "error",
+                        "message": f"Failed to process Likert data: {str(e)}",
+                        "type": "processing_error"
+                    }
+                })
         
-        # === PHASE 4: EXECUTIVE SUMMARY ===
-        await progress_manager.send_progress(job_id, "summary", "in_progress", "Creating executive summary...")
-        print("📋 Phase 4: Executive Summary Generation")
+        # Phase 4: Executive Summary
+        print("\n📋 PHASE 4: EXECUTIVE SUMMARY GENERATION")
+        print("-" * 50)
         
-        executive_summary = generate_executive_summary(final_df)
+        executive_summary = generate_executive_summary(final_df, likert_analysis)
         await progress_manager.send_progress(job_id, "summary", "complete", "Executive summary generated")
         
         print("✨ Pipeline completed successfully!")
@@ -837,6 +1197,7 @@ async def run_pipeline_with_progress(
             "executive_summary": executive_summary,
             "validation_results": validation_results,
             "ai_analysis_memo": ai_analysis_memo,
+            "likert_analysis": likert_analysis,
             "status": "success"
         }
         

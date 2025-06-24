@@ -177,7 +177,8 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
 async def process_files_with_progress(
     comments_file: UploadFile = File(...),
     schedule_file: Optional[UploadFile] = File(None),
-    grades_file: Optional[UploadFile] = File(None)
+    grades_file: Optional[UploadFile] = File(None),
+    likert_file: Optional[UploadFile] = File(None)
 ):
     """
     Analysis endpoint that supports WebSocket progress tracking.
@@ -208,12 +209,19 @@ async def process_files_with_progress(
             with open(grades_path, "wb") as buffer:
                 shutil.copyfileobj(grades_file.file, buffer)
         
+        # Save Likert file if provided
+        likert_path = None
+        if likert_file and likert_file.filename:
+            likert_path = os.path.join(temp_dir, likert_file.filename)
+            with open(likert_path, "wb") as buffer:
+                shutil.copyfileobj(likert_file.file, buffer)
+        
         # Start the analysis in the background with file paths
         def run_background_analysis():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(run_analysis_with_paths(job_id, comments_path, schedule_path, grades_path, temp_dir))
+                loop.run_until_complete(run_analysis_with_paths(job_id, comments_path, schedule_path, grades_path, likert_path, temp_dir))
             finally:
                 loop.close()
         
@@ -233,6 +241,7 @@ async def run_analysis_with_paths(
     comments_path: str,
     schedule_path: Optional[str] = None,
     grades_path: Optional[str] = None,
+    likert_path: Optional[str] = None,
     temp_dir: str = None
 ):
     """
@@ -247,8 +256,14 @@ async def run_analysis_with_paths(
             print(f"Schedule file: {schedule_path}")
         if grades_path:
             print(f"Grades file: {grades_path}")
+        if likert_path:
+            print(f"Likert file: {likert_path}")
         
         await progress_manager.send_progress(job_id, "cleaning", "complete", "Data cleaning completed")
+        
+        if likert_path:
+            await progress_manager.send_progress(job_id, "quantitative", "in_progress", "Processing quantitative survey data...")
+        
         await progress_manager.send_progress(job_id, "coding", "in_progress", "Generating initial codes & sentiment analysis...")
         
         # Run the in-memory pipeline with progress tracking
@@ -257,7 +272,8 @@ async def run_analysis_with_paths(
             job_id=job_id,
             comments_file_path=comments_path,
             schedule_file_path=schedule_path,
-            grades_file_path=grades_path
+            grades_file_path=grades_path,
+            likert_file_path=likert_path
         )
 
         final_df = results["final_dataframe"]
@@ -276,8 +292,10 @@ async def run_analysis_with_paths(
                 "comments_file": os.path.basename(comments_path),
                 "schedule_file": os.path.basename(schedule_path) if schedule_path else None,
                 "grades_file": os.path.basename(grades_path) if grades_path else None,
+                "likert_file": os.path.basename(likert_path) if likert_path else None,
                 "total_rows": len(final_df),
-                "total_columns": len(final_df.columns)
+                "total_columns": len(final_df.columns),
+                "has_quantitative_data": results.get("likert_analysis") is not None
             }
         }
         
@@ -302,7 +320,8 @@ async def run_analysis_with_paths(
                 "markdownReport": markdown_report,
                 "executiveSummary": executive_summary,
                 "aiAnalysisMemo": ai_analysis_memo,
-                "validationResults": validation_results
+                "validationResults": validation_results,
+                "quantitativeAnalysis": results.get("likert_analysis")
             }
         }
         
@@ -325,7 +344,8 @@ async def run_analysis_with_paths(
 async def process_files_endpoint(
     comments_file: UploadFile = File(...),
     schedule_file: Optional[UploadFile] = File(None),
-    grades_file: Optional[UploadFile] = File(None)
+    grades_file: Optional[UploadFile] = File(None),
+    likert_file: Optional[UploadFile] = File(None)
 ):
     """
     This single endpoint handles upload, processing, and returning JSON data.
@@ -354,13 +374,21 @@ async def process_files_endpoint(
                 with open(grades_path, "wb") as buffer:
                     shutil.copyfileobj(grades_file.file, buffer)
                 print(f"Saved grades file: {grades_file.filename}")
+
+            likert_path = None
+            if likert_file and likert_file.filename:
+                likert_path = os.path.join(tmpdir, likert_file.filename)
+                with open(likert_path, "wb") as buffer:
+                    shutil.copyfileobj(likert_file.file, buffer)
+                print(f"Saved Likert file: {likert_file.filename}")
             
             # Run the in-memory pipeline
             print("Starting pipeline processing...")
             results = run_pipeline(
                 comments_file_path=comments_path,
                 schedule_file_path=schedule_path,
-                grades_file_path=grades_path
+                grades_file_path=grades_path,
+                likert_file_path=likert_path
             )
 
             final_df = results["final_dataframe"]
@@ -368,6 +396,7 @@ async def process_files_endpoint(
             executive_summary = results.get("executive_summary", "")
             validation_results = results.get("validation_results", [])
             ai_analysis_memo = results.get("ai_analysis_memo", "")
+            likert_analysis = results.get("likert_analysis")
             
             print(f"Pipeline completed. Final DataFrame shape: {final_df.shape}")
             
@@ -382,8 +411,10 @@ async def process_files_endpoint(
                     "comments_file": comments_file.filename,
                     "schedule_file": schedule_file.filename if schedule_file else None,
                     "grades_file": grades_file.filename if grades_file else None,
+                    "likert_file": likert_file.filename if likert_file else None,
                     "total_rows": len(final_df),
-                    "total_columns": len(final_df.columns)
+                    "total_columns": len(final_df.columns),
+                    "has_quantitative_data": likert_analysis is not None
                 }
             }
             
@@ -402,12 +433,14 @@ async def process_files_endpoint(
                 "executiveSummary": executive_summary,
                 "aiAnalysisMemo": ai_analysis_memo,
                 "validationResults": validation_results,
+                "quantitativeAnalysis": likert_analysis,
                 "metadata": {
                     "totalRows": len(final_df),
                     "totalColumns": len(final_df.columns),
                     "columnsIncluded": list(final_df.columns),
                     "hasScheduleData": schedule_file is not None,
-                    "hasGradesData": grades_file is not None
+                    "hasGradesData": grades_file is not None,
+                    "hasQuantitativeData": likert_analysis is not None
                 }
             }
             

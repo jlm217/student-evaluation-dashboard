@@ -7,6 +7,8 @@ This script standardizes column names across different data files to enable prop
 - Schedule file: Number -> SectionNumber_ASU  
 - Grades file: Class Nbr -> SectionNumber_ASU
 
+NEW: Quantitative Survey Data (Likert) cleaning and transformation
+
 Usage:
     python data_cleaner.py --schedule schedule.csv --grades grades.csv --output-dir cleaned/
 """
@@ -14,6 +16,7 @@ Usage:
 import pandas as pd
 import argparse
 import os
+import re
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -260,6 +263,512 @@ def validate_merge_compatibility(comments_path: str, schedule_path: str, grades_
     if schedule_sections and grades_sections:
         schedule_grades_overlap = schedule_sections.intersection(grades_sections)
         print(f"   🔗 Schedule ∩ Grades: {len(schedule_grades_overlap)} sections")
+
+
+def clean_likert_file(input_path: str) -> tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Clean and transform Likert survey data from long format to wide format.
+    
+    This function handles the quantitative survey data integration by:
+    1. Loading the raw CSV data
+    2. Converting text responses to numerical values
+    3. Standardizing question text into machine-readable column headers
+    4. Pivoting from long format (one row per student per question) to wide format
+    5. Handling missing data gracefully
+    6. Creating question metadata with original text and response labels
+    
+    Args:
+        input_path (str): Path to the raw Likert data CSV file
+        
+    Returns:
+        tuple: (cleaned_df, question_metadata)
+            - cleaned_df: DataFrame in wide format with columns:
+                - SectionNumber_ASU: Section identifier
+                - DummyID: Student identifier (for merging with comments)
+                - q_[question_key]: Numerical responses for each question
+            - question_metadata: Dict with question_key -> question info mapping
+    """
+    print(f"🔢 Cleaning Likert survey data: {input_path}")
+    
+    # Load the raw data
+    try:
+        df = pd.read_csv(input_path)
+        print(f"   Loaded {len(df)} rows with {len(df.columns)} columns")
+    except Exception as e:
+        raise Exception(f"Failed to load Likert data file: {e}")
+    
+    # Validate required columns
+    required_columns = ['SectionNumber_ASU', 'QUESTION', 'responsevalue', 'DummyID']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise Exception(f"Missing required columns in Likert data: {missing_columns}")
+    
+    print(f"   Found {df['SectionNumber_ASU'].nunique()} unique sections")
+    print(f"   Found {df['QUESTION'].nunique()} unique questions")
+    print(f"   Found {df['DummyID'].nunique()} unique respondents")
+    
+    # Create mapping dictionary for text responses to numerical values
+    response_mapping = {
+        # 5-Point Likert Scale (High to Low)
+        'Strongly Agree': 5,
+        'Agree': 4,
+        'Neither Disagree nor Agree': 3,
+        'Neither Agree nor Disagree': 3,  # Alternative phrasing
+        'Neutral': 3,
+        'Disagree': 2,
+        'Strongly Disagree': 1,
+        
+        # Alternative 5-Point Scale (Strongly Agree to Strongly Disagree)
+        'Strongly agree': 5,  # Case variations
+        'agree': 4,
+        'neutral': 3,
+        'disagree': 2,
+        'Strongly disagree': 1,
+        
+        # Rating Scales (Very Good to Very Poor)
+        'Very Good': 5,
+        'Good': 4,
+        'Average': 3,
+        'Poor': 2,
+        'Very Poor': 1,
+        
+        # Effort/Frequency Scales
+        'Much Higher': 5,
+        'Higher': 4,
+        'About the Same': 3,
+        'Lower': 2,
+        'Much Lower': 1,
+        
+        # Access Frequency
+        'Five or more': 5,
+        'Four times a week': 4,
+        'Three times a week': 3,
+        'Twice a week': 2,
+        'Once a week': 1,
+        
+        # Yes/No Questions
+        'Yes': 1,
+        'No': 0,
+        
+        # Grade Expectations (A=5 to F=1)
+        'A': 5,
+        'B': 4,
+        'C': 3,
+        'D': 2,
+        'E': 1,
+        'F': 1,
+        
+        # Required/Elective
+        'Required': 1,
+        'Elective': 0,
+        
+        # Course Learning
+        'Advisor': 2,
+        'Friend': 1,
+        'Other': 0,
+        
+        # Working Hours
+        'I am not working': 0,
+        '1-10 hours': 1,
+        '11-20 hours': 2,
+        '21-30 hours': 3,
+        '31-40 hours': 4,
+        'More than 40 hours': 5,
+        
+        # Numeric string responses (already in proper format)
+        '1': 1,
+        '2': 2, 
+        '3': 3,
+        '4': 4,
+        '5': 5,
+        '6': 6,  # Some scales might go higher
+        '0': 0,
+    }
+    
+    # Apply response mapping, but also handle cases where responses are already numeric
+    print("   Converting text responses to numerical values...")
+    
+    def convert_response(response_value):
+        """Convert response to numeric, handling both text and already-numeric values."""
+        if pd.isna(response_value):
+            return None
+            
+        # First try the mapping dictionary
+        if response_value in response_mapping:
+            return response_mapping[response_value]
+            
+        # If not in mapping, try to convert directly to numeric
+        try:
+            numeric_val = float(response_value)
+            # Ensure it's a reasonable range (0-6 for most scales)
+            if 0 <= numeric_val <= 10:  # Allow some flexibility
+                return int(numeric_val)
+        except (ValueError, TypeError):
+            pass
+            
+        # If all else fails, return None (will be caught as unmapped)
+        return None
+    
+    df['numeric_response'] = df['responsevalue'].apply(convert_response)
+    
+    # Check for unmapped responses
+    unmapped_responses = df[df['numeric_response'].isna()]['responsevalue'].unique()
+    if len(unmapped_responses) > 0:
+        print(f"   ⚠️  Warning: Found {len(unmapped_responses)} unmapped response values:")
+        for response in unmapped_responses[:10]:  # Show first 10
+            print(f"      '{response}'")
+        if len(unmapped_responses) > 10:
+            print(f"      ... and {len(unmapped_responses) - 10} more")
+
+    # Function to determine response labels based on the question and actual responses
+    def determine_response_labels(question_text: str, response_values: set) -> Dict[str, str]:
+        """
+        Determine appropriate response labels for a question based on its text and actual response values.
+        """
+        question_lower = question_text.lower()
+        unique_numeric = {v for v in response_values if pd.notna(v) and v >= 0}
+        
+        # Check if this is a grade expectation question
+        if any(keyword in question_lower for keyword in ['grade', 'expect to earn']):
+            return {
+                '5': 'A',
+                '4': 'B', 
+                '3': 'C',
+                '2': 'D',
+                '1': 'E'
+            }
+        
+        # Check if this is a yes/no question based on question text
+        elif any(keyword in question_lower for keyword in ['did you', 'do you', 'have you', 'are you', 'go to']):
+            # For yes/no questions, check if responses are primarily binary (even if on 1-5 scale)
+            if len(unique_numeric) <= 3 and max(unique_numeric) <= 2:
+                # Classic binary: 0=No, 1=Yes
+                return {
+                    '1': 'Yes',
+                    '0': 'No'
+                }
+            elif len(unique_numeric) <= 3 and min(unique_numeric) >= 1 and max(unique_numeric) <= 2:
+                # Binary on 1-2 scale: 1=No, 2=Yes (common in surveys)
+                return {
+                    '2': 'Yes',
+                    '1': 'No'
+                }
+            elif len(unique_numeric) <= 3 and 1 in unique_numeric and max(unique_numeric) <= 5:
+                # Yes/No question where "No" maps to 1 (Strongly Disagree) and "Yes" maps to higher values
+                # This handles cases where Yes/No gets converted to agreement scale
+                return {
+                    '5': 'Yes',
+                    '4': 'Yes',
+                    '3': 'Somewhat',
+                    '2': 'No',
+                    '1': 'No'
+                }
+        
+        # Check if this is a frequency question
+        elif any(keyword in question_lower for keyword in ['how often', 'how many times', 'frequency']):
+            # Check if this is an access frequency question (course access)
+            if any(access_keyword in question_lower for access_keyword in ['access', 'visit', 'log in', 'login']):
+                return {
+                    '5': 'Five or more',
+                    '4': 'Four times a week',
+                    '3': 'Three times a week', 
+                    '2': 'Twice a week',
+                    '1': 'Once a week'
+                }
+            # Generic frequency scales for other questions
+            elif max(unique_numeric) <= 5:
+                return {
+                    '5': 'Very Often',
+                    '4': 'Often',
+                    '3': 'Sometimes', 
+                    '2': 'Rarely',
+                    '1': 'Never'
+                }
+        
+        # Check if this is a workload comparison question
+        elif any(keyword in question_lower for keyword in ['compared to', 'relative to', 'workload']):
+            return {
+                '5': 'Much Higher',
+                '4': 'Higher',
+                '3': 'About the Same',
+                '2': 'Lower',
+                '1': 'Much Lower'
+            }
+        
+        # Check if this is a quality rating question
+        elif any(keyword in question_lower for keyword in ['quality', 'rate the', 'how would you rate']):
+            return {
+                '5': 'Excellent',
+                '4': 'Good',
+                '3': 'Average',
+                '2': 'Poor',
+                '1': 'Very Poor'
+            }
+        
+        # Default to Likert scale for agreement-based questions
+        else:
+            return {
+                '5': 'Strongly Agree',
+                '4': 'Agree',
+                '3': 'Neutral',
+                '2': 'Disagree',
+                '1': 'Strongly Disagree'
+            }
+    
+    # Function to standardize question text into clean column headers
+    def create_question_key(question_text: str) -> str:
+        """
+        Convert question text to standardized column header.
+        
+        Examples:
+        "The instructor was an effective teacher." -> "q_instructor_effective"
+        "How would you rate the course as a whole?" -> "q_rate_course_whole"
+        """
+        if pd.isna(question_text):
+            return "q_unknown"
+        
+        # Convert to lowercase and clean
+        clean_text = str(question_text).lower()
+        
+        # Remove common question prefixes
+        prefixes_to_remove = [
+            'how would you rate the ',
+            'how would you rate ',
+            'how did you ',
+            'how many ',
+            'would you ',
+            'do you ',
+            'did you ',
+            'are you ',
+            'is this ',
+            'what grade ',
+            'relative to other courses you have taken, ',
+            'if your class had a lab component, ',
+            'on average, ',
+        ]
+        
+        for prefix in prefixes_to_remove:
+            if clean_text.startswith(prefix):
+                clean_text = clean_text[len(prefix):]
+                break
+        
+        # Remove punctuation and special characters
+        clean_text = re.sub(r'[^\w\s]', ' ', clean_text)
+        
+        # Replace multiple spaces with single space
+        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        
+        # Split into words and take meaningful ones
+        words = clean_text.split()
+        
+        # Remove common words that don't add meaning
+        stop_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 
+            'by', 'was', 'were', 'is', 'are', 'be', 'been', 'have', 'has', 'had', 'this', 'that',
+            'these', 'those', 'you', 'your', 'my', 'our', 'their', 'his', 'her', 'its'
+        }
+        
+        meaningful_words = [word for word in words if word not in stop_words and len(word) > 1]
+        
+        # Take first 4-5 most meaningful words to keep column names reasonable
+        key_words = meaningful_words[:5]
+        
+        # Join with underscores and add prefix
+        question_key = 'q_' + '_'.join(key_words)
+        
+        # Ensure reasonable length (max 50 chars)
+        if len(question_key) > 50:
+            question_key = question_key[:50].rstrip('_')
+            
+        return question_key
+    
+    # Create standardized question keys and build metadata
+    print("   Creating standardized question keys and metadata...")
+    df['question_key'] = df['QUESTION'].apply(create_question_key)
+    
+    # Create question metadata dictionary
+    question_metadata = {}
+    unique_questions = df[['QUESTION', 'question_key']].drop_duplicates()
+    
+    for _, row in unique_questions.iterrows():
+        question_text = row['QUESTION']
+        question_key = row['question_key']
+        
+        # Get all response values for this question to determine labels
+        question_responses = df[df['question_key'] == question_key]['responsevalue'].unique()
+        response_labels = determine_response_labels(question_text, set(question_responses))
+        
+        question_metadata[question_key] = {
+            'question_text': question_text,
+            'response_labels': response_labels
+        }
+    
+    # Show some examples of question key mapping
+    question_examples = unique_questions.head(5)
+    print("   Example question key mappings:")
+    for _, row in question_examples.iterrows():
+        print(f"      '{row['QUESTION'][:60]}...' -> '{row['question_key']}'")
+    
+    # Convert SectionNumber_ASU to string for consistency
+    df['SectionNumber_ASU'] = df['SectionNumber_ASU'].astype(str)
+    
+    # Create unique student-section identifier for pivoting
+    df['student_section_id'] = df['DummyID'].astype(str) + '_' + df['SectionNumber_ASU'].astype(str)
+    
+    # Pivot the data from long to wide format
+    print("   Pivoting data from long to wide format...")
+    try:
+        # Use pivot_table to handle potential duplicates
+        pivot_df = df.pivot_table(
+            index=['student_section_id', 'SectionNumber_ASU', 'DummyID'],
+            columns='question_key',
+            values='numeric_response',
+            aggfunc='first'  # Take first value if duplicates exist
+        )
+        
+        # Reset index to make it a regular DataFrame
+        wide_df = pivot_df.reset_index()
+        
+        # Fill NaN values with appropriate defaults
+        # For questions, use -1 to indicate "not asked" vs 0 which could be a valid response
+        question_columns = [col for col in wide_df.columns if col.startswith('q_')]
+        wide_df[question_columns] = wide_df[question_columns].fillna(-1)
+        
+        print(f"   ✅ Successfully pivoted data:")
+        print(f"      - {len(wide_df)} unique student-section combinations")
+        print(f"      - {len(question_columns)} question columns")
+        print(f"      - Sections: {sorted(wide_df['SectionNumber_ASU'].unique())}")
+        print(f"      - Question metadata created for {len(question_metadata)} questions")
+        
+        # Convert SectionNumber_ASU back to numeric for consistency with other datasets
+        wide_df['SectionNumber_ASU'] = pd.to_numeric(wide_df['SectionNumber_ASU'], errors='coerce')
+        
+        # Remove rows where SectionNumber_ASU conversion failed
+        wide_df = wide_df.dropna(subset=['SectionNumber_ASU'])
+        
+        return wide_df, question_metadata
+        
+    except Exception as e:
+        raise Exception(f"Failed to pivot Likert data: {e}")
+
+
+def analyze_response_rates(likert_df: pd.DataFrame) -> dict:
+    """
+    Analyze survey response rates from Likert data.
+    
+    This function calculates response rates per section using unique DummyID counts
+    and compares with built-in enrollment data when available.
+    
+    Args:
+        likert_df (pd.DataFrame): Cleaned Likert data in wide format
+        
+    Returns:
+        dict: Response rate analysis with section-level statistics
+    """
+    print("📊 Analyzing survey response rates...")
+    
+    if likert_df.empty:
+        print("   ⚠️  No Likert data available for response rate analysis")
+        return {}
+    
+    # Calculate unique respondents per section
+    section_stats = []
+    
+    for section_num in sorted(likert_df['SectionNumber_ASU'].unique()):
+        section_data = likert_df[likert_df['SectionNumber_ASU'] == section_num]
+        
+        # Count unique respondents using DummyID
+        unique_respondents = section_data['DummyID'].nunique()
+        
+        # Get built-in enrollment data if available (from original raw data)
+        # Note: This would require passing additional enrollment data
+        # For now, we'll focus on respondent counts and response patterns
+        
+        section_stats.append({
+            'SectionNumber_ASU': int(section_num),
+            'unique_respondents': unique_respondents,
+            'total_responses': len(section_data),
+            'avg_questions_per_student': len(section_data) / unique_respondents if unique_respondents > 0 else 0
+        })
+    
+    # Calculate overall statistics
+    total_respondents = likert_df['DummyID'].nunique()
+    total_sections = len(section_stats)
+    avg_respondents_per_section = total_respondents / total_sections if total_sections > 0 else 0
+    
+    response_analysis = {
+        'overall_stats': {
+            'total_unique_respondents': total_respondents,
+            'total_sections_with_surveys': total_sections,
+            'avg_respondents_per_section': round(avg_respondents_per_section, 1)
+        },
+        'section_details': section_stats,
+        'data_quality_indicators': {
+            'sections_with_low_response': len([s for s in section_stats if s['unique_respondents'] < 5]),
+            'sections_with_high_response': len([s for s in section_stats if s['unique_respondents'] >= 20]),
+            'response_distribution': {
+                'min_respondents': min([s['unique_respondents'] for s in section_stats]) if section_stats else 0,
+                'max_respondents': max([s['unique_respondents'] for s in section_stats]) if section_stats else 0,
+                'median_respondents': sorted([s['unique_respondents'] for s in section_stats])[len(section_stats)//2] if section_stats else 0
+            }
+        }
+    }
+    
+    # Print summary
+    print(f"   📈 Response Rate Analysis Summary:")
+    print(f"      - Total unique survey respondents: {total_respondents}")
+    print(f"      - Sections with survey data: {total_sections}")
+    print(f"      - Average respondents per section: {avg_respondents_per_section:.1f}")
+    print(f"      - Response range: {response_analysis['data_quality_indicators']['response_distribution']['min_respondents']}-{response_analysis['data_quality_indicators']['response_distribution']['max_respondents']} respondents per section")
+    
+    # Highlight potential data quality concerns
+    low_response_sections = response_analysis['data_quality_indicators']['sections_with_low_response']
+    if low_response_sections > 0:
+        print(f"      ⚠️  {low_response_sections} sections have <5 respondents (low statistical confidence)")
+    
+    return response_analysis
+
+
+def enhance_likert_analysis_with_response_rates(likert_analysis: dict, response_analysis: dict) -> dict:
+    """
+    Enhance existing Likert analysis results with response rate information.
+    
+    Args:
+        likert_analysis (dict): Existing quantitative analysis results
+        response_analysis (dict): Response rate analysis results
+        
+    Returns:
+        dict: Enhanced analysis with response rate context
+    """
+    if not likert_analysis or not response_analysis:
+        return likert_analysis
+    
+    # Add response rate context to each section's analysis
+    enhanced_analysis = likert_analysis.copy()
+    
+    # Create lookup for response rates by section
+    response_lookup = {
+        section['SectionNumber_ASU']: section 
+        for section in response_analysis.get('section_details', [])
+    }
+    
+    # Enhance section-level analysis
+    sections_dict = enhanced_analysis.get('sections', {})
+    for section_num, section_data in sections_dict.items():
+        response_info = response_lookup.get(section_num, {})
+        
+        if response_info:
+            section_data['response_rate_info'] = {
+                'unique_respondents': response_info.get('unique_respondents', 0),
+                'statistical_confidence': 'high' if response_info.get('unique_respondents', 0) >= 20 else 
+                                        'medium' if response_info.get('unique_respondents', 0) >= 10 else 'low',
+                'avg_questions_per_student': response_info.get('avg_questions_per_student', 0)
+            }
+    
+    # Add overall response rate summary
+    enhanced_analysis['response_rate_summary'] = response_analysis.get('overall_stats', {})
+    
+    return enhanced_analysis
 
 
 def main():

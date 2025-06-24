@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Qualitative Analysis Dashboard</title>
+    <title>Student Evaluation Analysis Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -263,14 +263,14 @@
     <div class="container mx-auto p-4 md:p-8">
         <!-- Header -->
         <header class="mb-8">
-            <h1 class="text-4xl font-bold text-gray-900">Qualitative Analysis Dashboard</h1>
+            <h1 class="text-4xl font-bold text-gray-900">Student Evaluation Analysis Dashboard</h1>
             <p class="text-lg text-gray-600 mt-1">Upload course data to analyze student feedback and performance.</p>
         </header>
 
         <!-- Upload Section -->
         <div class="card upload-section" id="upload-section">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">Upload Your Data</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <!-- Comments File (Required) -->
                 <div class="flex flex-col">
                     <label for="comments-file" class="font-medium text-gray-700 mb-2">
@@ -297,6 +297,15 @@
                     <input type="file" id="grades-file" accept=".csv" class="file-input">
                     <div id="grades-status" class="text-sm"></div>
                     <p class="text-xs text-gray-500 mt-1">Optional: Grade distribution data</p>
+                </div>
+                <!-- Likert File (Optional) -->
+                <div class="flex flex-col">
+                    <label for="likert-file" class="font-medium text-gray-700 mb-2">
+                        <i class="fas fa-chart-line mr-2 text-purple-500"></i>Survey Data (Likert)
+                    </label>
+                    <input type="file" id="likert-file" accept=".csv" class="file-input">
+                    <div id="likert-status" class="text-sm"></div>
+                    <p class="text-xs text-gray-500 mt-1">Optional: Quantitative survey responses</p>
                 </div>
             </div>
 
@@ -368,6 +377,20 @@
                         </div>
                     </div>
                     <div class="step-connector" id="connector-themes"></div>
+                </div>
+
+                <!-- Step 3.5: Quantitative (Conditional) -->
+                <div class="progress-step hidden" id="step-quantitative">
+                    <div class="flex items-center">
+                        <div class="step-icon pending" id="icon-quantitative">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        <div class="step-content">
+                            <h3 class="font-semibold text-gray-800">Processing Quantitative Survey Data</h3>
+                            <p class="text-sm text-gray-600" id="msg-quantitative">Analyzing survey responses and calculating peer benchmarks...</p>
+                        </div>
+                    </div>
+                    <div class="step-connector" id="connector-quantitative"></div>
                 </div>
 
                 <!-- Step 4: Summary -->
@@ -446,72 +469,68 @@
             <h2 class="text-2xl font-semibold mb-0 text-gray-800">Explore the Analysis</h2>
 
             <!-- Course Section Filter and Details -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="space-y-6">
                 <!-- Course Section Filter -->
-                <div class="lg:col-span-1">
-                    <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-                        <h3 class="font-bold text-xl mb-4 text-gray-900">
-                            <i class="fas fa-filter mr-2 text-blue-500"></i>Course Section Filter
-                        </h3>
-                        <select id="section-filter" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="all">All Sections</option>
-                        </select>
+                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                    <h3 class="font-bold text-xl mb-4 text-gray-900">
+                        <i class="fas fa-filter mr-2 text-blue-500"></i>Course Section Filter
+                    </h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
+                        <div class="lg:col-span-3">
+                            <select id="section-filter" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="all">All Sections</option>
+                            </select>
+                        </div>
+                        <div class="lg:col-span-1">
+                            <button id="executive-summary-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                                <i class="fas fa-file-alt mr-2"></i>View Executive Summary
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Course Details Card -->
-                <div class="lg:col-span-2">
-                    <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-                        <h3 class="font-bold text-xl mb-4 text-gray-900">
-                            <i class="fas fa-info-circle mr-2 text-indigo-500"></i>Course Details
-                        </h3>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm" id="course-details">
-                            <div class="text-center">
-                                <div class="text-2xl font-bold text-indigo-600" id="detail-instructor">-</div>
-                                <div class="text-gray-600">Instructor</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-2xl font-bold text-green-600" id="detail-modality">-</div>
-                                <div class="text-gray-600">Modality</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-2xl font-bold text-purple-600" id="detail-term">-</div>
-                                <div class="text-gray-600">Term</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-2xl font-bold text-orange-600" id="detail-enrollment">-</div>
-                                <div class="text-gray-600">Enrollment</div>
-                            </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                    <h3 class="font-bold text-xl mb-4 text-gray-900">
+                        <i class="fas fa-info-circle mr-2 text-indigo-500"></i>Course Details
+                    </h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm" id="course-details">
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-indigo-600" id="detail-instructor">-</div>
+                            <div class="text-gray-600">Instructor</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-green-600" id="detail-modality">-</div>
+                            <div class="text-gray-600">Modality</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-purple-600" id="detail-term">-</div>
+                            <div class="text-gray-600">Term</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-orange-600" id="detail-enrollment">-</div>
+                            <div class="text-gray-600">Enrollment</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Thematic Summary and Grade Distribution -->
+            <!-- Quantitative Survey Results and Grade Distribution -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Thematic Summary -->
-                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-bold text-xl text-gray-900">
-                            <i class="fas fa-chart-pie mr-2 text-blue-500"></i>Thematic Summary
-                        </h3>
-                        <button id="analysis-memo-btn-thematic" class="text-gray-400 hover:text-indigo-600 transition-colors text-sm" title="View AI Analysis Memo">
-                            <i class="fas fa-question-circle"></i>
-                        </button>
-                    </div>
-                    <div class="max-h-80 overflow-y-auto" id="thematic-summary">
-                        <!-- Thematic data will be populated here -->
-                    </div>
-                    <div class="mt-4 pt-4 border-t border-gray-200">
-                        <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                            <div class="text-center">
-                                <div class="font-semibold text-gray-800" id="total-comments">-</div>
-                                <div>Total Comments</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="font-semibold text-gray-800" id="total-themes">-</div>
-                                <div>Themes Found</div>
-                            </div>
+                <!-- Quantitative Survey Results (Conditional) -->
+                <div id="quantitative-results-container" class="bg-white rounded-xl shadow-md border border-gray-200 hidden">
+                    <button id="toggle-quantitative" class="w-full text-left p-4 font-semibold text-lg text-gray-800 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                        <span><i class="fas fa-chart-bar mr-3 text-purple-500"></i>Quantitative Survey Results</span>
+                        <i id="quantitative-chevron" class="fas fa-chevron-down transition-transform"></i>
+                    </button>
+                    <div id="quantitative-content" class="px-6 pb-6 border-t border-gray-200 hidden">
+                        <div id="quantitative-charts-wrapper" class="space-y-6 max-h-96 overflow-y-auto pr-2" style="scrollbar-width: thin;">
+                            <!-- Dynamic charts will be inserted here -->
+                        </div>
+                        <div id="no-quantitative-data" class="text-center py-8 text-gray-500 hidden">
+                            <i class="fas fa-info-circle text-3xl mb-3"></i>
+                            <p class="text-lg">No quantitative survey data available for this section.</p>
+                            <p class="text-sm">Upload a Likert survey data file to see quantitative insights.</p>
                         </div>
                     </div>
                 </div>
@@ -544,19 +563,32 @@
                 </div>
             </div>
 
-            <!-- Executive Summary -->
-            <div id="takeaways-container" class="bg-white rounded-xl shadow-md border border-gray-200">
-                <button id="toggle-takeaways" class="w-full text-left p-4 font-semibold text-lg text-gray-800 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                    <span><i class="fas fa-chart-line mr-3 text-blue-500"></i>Executive Summary</span>
-                    <i id="takeaway-chevron" class="fas fa-chevron-down transition-transform"></i>
-                </button>
-                <div id="takeaways-content" class="px-6 pb-6 border-t border-gray-200 prose max-w-none hidden">
-                    <!-- Executive summary content will be populated dynamically -->
+            <!-- Thematic Summary -->
+            <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-bold text-xl text-gray-900">
+                        <i class="fas fa-chart-pie mr-2 text-blue-500"></i>Thematic Summary
+                    </h3>
+                    <button id="analysis-memo-btn-thematic" class="text-gray-400 hover:text-indigo-600 transition-colors text-sm" title="View AI Analysis Memo">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                </div>
+                <div class="max-h-80 overflow-y-auto" id="thematic-summary">
+                    <!-- Thematic data will be populated here -->
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                        <div class="text-center">
+                            <div class="font-semibold text-gray-800" id="total-comments">-</div>
+                            <div>Total Comments</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="font-semibold text-gray-800" id="total-themes">-</div>
+                            <div>Themes Found</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-
-
-
 
             <!-- Student Feedback Module -->
             <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
@@ -615,96 +647,104 @@
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-            
+
             <div class="px-6 py-6 space-y-8">
                 <div>
                     <p class="text-gray-700 text-lg leading-relaxed">
-                        This system uses a structured, AI-assisted approach designed to help make sense of a large number of student comments. The goal is to identify the key themes in student feedback so that course improvements can be made based on what students actually say—and mean.
-                    </p>
-                    <p class="text-gray-700 text-lg leading-relaxed mt-4">
-                        The analysis is divided into four phases:
+                        This dashboard uses a structured, AI-assisted process to analyze both student comments and survey responses. It helps identify what students said, how they rated the course, and what patterns can inform course improvement.
                     </p>
                 </div>
 
                 <!-- Phase 0 -->
                 <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 0: Data Cleaning and Preparation</h3>
-                    <p class="text-gray-700 mb-4">
-                        Before any analysis begins, the some code helps (no AI in this phase) cleans and standardizes the raw data to ensure quality and consistency throughout the process.
-                    </p>
-                    <p class="text-gray-700 mb-3">This phase includes:</p>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 0: Data Cleaning</h3>
                     <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>Column standardization:</strong> Maps different column names (e.g., "Question", "Q", "question") to consistent formats.</li>
-                        <li><strong>Text cleaning:</strong> Standardizes whitespace, encoding, and formatting issues that could interfere with analysis.</li>
-                        <li><strong>Duplicate detection:</strong> Identifies and handles potential duplicate responses.</li>
+                        <li><strong>Standardize columns:</strong> Maps varied column names (e.g., "Q", "question") to a consistent format.</li>
+                        <li><strong>Clean up text:</strong> Fixes spacing, symbols, or formatting issues.</li>
+                        <li><strong>Find duplicates:</strong> Detects and removes repeated responses.</li>
                     </ul>
                     <p class="text-gray-700 mt-4">
-                        <strong>Why this matters:</strong> Clean data ensures that the AI can focus on meaningful content rather than getting confused by formatting inconsistencies or unncessary additional information.
+                        <strong>Why it matters:</strong> Clean, consistent data gives the AI a strong foundation to work from.
                     </p>
                 </div>
 
                 <!-- Phase 1 -->
                 <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 1: Turning Student Comments Into Codes</h3>
-                    <p class="text-gray-700 mb-4">
-                        In this phase, the AI reads through <strong>student comments</strong> and applies a short descriptive label—or "code"—to each one. This process is similar to what a qualitative researcher would do manually: distill each comment down to the main idea or issue.
-                    </p>
-                    <p class="text-gray-700 mb-3">Here's how it works:</p>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 1: Coding Comments</h3>
                     <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>AI Model:</strong> Google Gemini 1.5 Flash processes each batch of student comments.</li>
-                        <li><strong>Batching for accuracy:</strong> Comments are analyzed in small groups of 20 to avoid overwhelming the system and keep processing costs reasonable.</li>
-                        <li><strong>Avoiding duplicates:</strong> When there are 30+ codes, the AI is shown recent codes to encourage reuse rather than creating variants like "Too much work" and "High workload" separately.</li>
-                        <li><strong>Sentiment tagging:</strong> Each comment is tagged as Positive, Negative, or Neutral based on tone.</li>
+                        <li><strong>Short labels:</strong> The AI assigns a brief, meaningful code to each comment.</li>
+                        <li><strong>Group size:</strong> Comments are processed in small batches (20 at a time).</li>
+                        <li><strong>Prevent redundancy:</strong> After 30+ codes, the AI is prompted to reuse similar ones.</li>
+                        <li><strong>Sentiment analysis:</strong> Each comment is marked Positive, Negative, or Neutral.</li>
                     </ul>
                     <p class="text-gray-700 mt-4">
-                        <strong>Outcome:</strong> A set of unique codes are generated, each with a count and sentiment analysis.
+                        <strong>Outcome:</strong> A complete set of comment codes with sentiment and usage counts.
                     </p>
                 </div>
 
                 <!-- Phase 2 -->
                 <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 2: Grouping Codes Into Themes</h3>
-                    <p class="text-gray-700 mb-4">
-                        In this phase, the AI looks at the codes it has created and groups them into broader, more meaningful themes. This helps move from "what students say" to "what students are really talking about."
-                    </p>
-                    <p class="text-gray-700 mb-3">What guides this process:</p>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 2: Grouping into Themes</h3>
                     <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>AI Model:</strong> Google Gemini 2.5 Flash analyzes code patterns and creates thematic groupings.</li>
-                        <li><strong>Frequency matters:</strong> Codes that appear more often have stronger influence on theme formation.</li>
-                        <li><strong>Examples included:</strong> For each code, the AI reviews sample student quotes to understand deeper meaning.</li>
-                        <li><strong>Clear and Neutral themes:</strong> The AI is instructed to develop theme names that are descriptive and neutral (like "Assessment Feedback" or "TA Support") - avoiding emotional or overly complex labels.</li>
-                        <li><strong>Right number:</strong> Targets 6-10 themes based on data size for optimal manageability and clarity.</li>
-                        <li><strong>Quality check:</strong> Automatic verification ensures every code is assigned to exactly one theme.</li>
+                        <li><strong>Broader patterns:</strong> Similar codes are grouped into clear, neutral themes (e.g., "Assessment Feedback").</li>
+                        <li><strong>Frequency impact:</strong> Common codes influence themes more heavily.</li>
+                        <li><strong>Quote examples:</strong> Real comments help the AI understand code meaning.</li>
+                        <li><strong>One-to-one mapping:</strong> Every code is placed in exactly one theme.</li>
                     </ul>
                     <p class="text-gray-700 mt-4">
-                        <strong>Outcome:</strong> A focused set of themes are created, each with explanations and frequency data.
+                        <strong>Outcome:</strong> A focused list of themes with definitions, frequency, and supporting comments.
                     </p>
                 </div>
 
                 <!-- Phase 3 -->
                 <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 3: Data Integration and Executive Summary</h3>
-                    <p class="text-gray-700 mb-4">
-                        Additional quantitative course data (schedules, grades) are merged with the themed comments to provide context and enable richer analysis.
-                    </p>
-                    <p class="text-gray-700 mb-3">The AI is instructed to:</p>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 3: Survey Analysis</h3>
                     <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>AI Model:</strong> Google Gemini 2.5 Flash generates the executive summary and strategic recommendations.</li>
-                        <li><strong>Look for connections:</strong> The AI is prompted to act as an educational data strategist and produce a structured summary based on both the qualitative themes and the quantitative course performance data (e.g., DEW rates, grade distributions).</li>
-                        <li><strong>Find Strengths and Areas for Improvement:</strong> Performance data enables calculation of DEW rates and grade distributions.</li>
-                        <li><strong>Look for patterns:</strong> Highlight key patterns and contrasts between sections or modalities.</li>
-                        <li><strong>Emphasize student voices:</strong> The AI is instructed to use the direct student comments to inform and enhance its analysis.</li>
-                        <li><strong>Provide actionable insights:</strong> Suggest 2-3 concrete recommendations supported by both student voices and performance data.</li>
+                        <li><strong>Smart benchmarking:</strong> Each section's survey score is compared only to sections that asked the same question.</li>
+                        <li><strong>Scoring:</strong> Survey responses are converted to numeric values.</li>
+                        <li><strong>Comparisons:</strong> Sections are marked as above/below average where patterns emerge.</li>
+                        <li><strong>Distribution:</strong> Bar charts show how students responded on the scale.</li>
+                    </ul>
+                    <p class="text-gray-700 mt-4">
+                        <strong>Why it matters:</strong> Quantitative scores help validate or challenge what students said in comments.
+                    </p>
+                </div>
+
+                <!-- Phase 4 -->
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 4: Merging Data</h3>
+                    <ul class="text-gray-700 space-y-2 ml-6">
+                        <li><strong>Section matching:</strong> Comments, survey results, and grade data are linked by section ID.</li>
+                        <li><strong>Academic metrics:</strong> DEW rates and grade distributions are calculated for context.</li>
+                        <li><strong>Data checks:</strong> Any missing files or mismatches are flagged in the system.</li>
                     </ul>
                 </div>
-                <!-- What You Can See -->
+
+                <!-- Phase 5 -->
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 5: Executive Summary</h3>
+                    <ul class="text-gray-700 space-y-2 ml-6">
+                        <li><strong>Combines everything:</strong> The AI creates a final summary using all available data.</li>
+                        <li><strong>Connects dots:</strong> Links comments, scores, and outcomes to find patterns.</li>
+                        <li><strong>Uses real quotes:</strong> Representative student voices appear in the summary.</li>
+                        <li><strong>Recommends actions:</strong> Highlights 2–3 areas where improvement would help most.</li>
+                    </ul>
+                    <p class="text-gray-700 mt-4">
+                        <strong>Outcome:</strong> A clear, readable summary of key findings, with concrete suggestions.
+                    </p>
+                </div>
+
+                <!-- Dashboard Summary -->
                 <div class="border-t border-gray-200 pt-6">
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">What is on the dashboard?</h3>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">What You Can See on the Dashboard</h3>
                     <ul class="text-gray-700 space-y-2">
-                        <li>• The dashboard shows the full set of themes, their frequency, their sentiment ratios, and example student comments.</li>
-                        <li>• You can download the complete mapping showing how each comment is coded and themed.</li>
-                        <li>• The AI's analytical memo documents its reasoning and methodological decisions.</li>
-                        <li>• Grade distributions and DEW rates provide performance context alongside student feedback.</li>
+                        <li>• <strong>Themes:</strong> Key feedback topics, with comment counts, sentiment, and student examples.</li>
+                        <li>• <strong>Survey data:</strong> Section-by-section comparisons, with average scores and peer benchmarks.</li>
+                        <li>• <strong>Grades:</strong> DEW rates and grade distributions for every section.</li>
+                        <li>• <strong>Filters:</strong> Focus on individual sections to explore their specific patterns.</li>
+                        <li>• <strong>Summary:</strong> AI-generated report highlighting key themes and next steps.</li>
+                        <li>• <strong>Transparency tools:</strong> Downloadable mapping from comments → codes → themes, plus the AI's own explanation.</li>
+                        <li>• <strong>Alerts:</strong> Automatic flags for possible data issues or mismatches.</li>
                     </ul>
                 </div>
             </div>
@@ -742,11 +782,43 @@
         </div>
     </div>
     
+    <!-- Executive Summary Overlay Modal -->
+    <div id="executive-summary-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+            <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-gray-900">Executive Summary</h2>
+                <button id="close-executive-summary" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="px-6 py-6">
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-chart-line text-blue-400 w-5 h-5"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-blue-700">
+                                <strong>Strategic Analysis:</strong> This summary provides key insights and actionable recommendations based on student feedback, academic performance data, and quantitative survey results.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="executive-summary-overlay-content" class="prose max-w-none">
+                    <!-- Executive summary content will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script>
         let selectedFiles = {
             comments: null,
             schedule: null,
-            grades: null
+            grades: null,
+            likert: null
         };
         let allComments = [];
         let allThemes = [];
@@ -772,6 +844,11 @@
         document.getElementById('grades-file').addEventListener('change', function(e) {
             selectedFiles.grades = e.target.files[0];
             updateFileStatus('grades', selectedFiles.grades);
+        });
+
+        document.getElementById('likert-file').addEventListener('change', function(e) {
+            selectedFiles.likert = e.target.files[0];
+            updateFileStatus('likert', selectedFiles.likert);
         });
 
         // Initialize methodology modal on page load
@@ -890,6 +967,10 @@
                 if (selectedFiles.grades) {
                     formData.append('grades_file', selectedFiles.grades);
                 }
+                
+                if (selectedFiles.likert) {
+                    formData.append('likert_file', selectedFiles.likert);
+                }
 
                 const response = await fetch('/api/v2/analyze-with-progress', {
                     method: 'POST',
@@ -921,12 +1002,17 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('progress-tracker').style.display = 'block';
             
+            // Show quantitative step if Likert file is uploaded
+            if (selectedFiles.likert) {
+                document.getElementById('step-quantitative').classList.remove('hidden');
+            }
+            
             // Reset all progress steps to pending
             resetProgressSteps();
         }
 
         function resetProgressSteps() {
-            const steps = ['cleaning', 'coding', 'themes', 'summary'];
+            const steps = ['cleaning', 'quantitative', 'coding', 'themes', 'summary'];
             steps.forEach(step => {
                 const icon = document.getElementById(`icon-${step}`);
                 icon.className = 'step-icon pending';
@@ -1039,6 +1125,7 @@
                     // Keep original icon for in_progress
                     const originalIcons = {
                         'cleaning': 'fa-broom',
+                        'quantitative': 'fa-chart-bar',
                         'coding': 'fa-tags', 
                         'themes': 'fa-lightbulb',
                         'summary': 'fa-file-alt'
@@ -1188,6 +1275,7 @@
                 dashboardData: analysisData.dashboardData,
                 markdownReport: analysisData.markdownReport,
                 executiveSummary: analysisData.executiveSummary,
+                quantitativeAnalysis: analysisData.quantitativeAnalysis,
                 jobId: analysisData.jobId
             };
             
@@ -1201,7 +1289,7 @@
             
             // Use the dashboard data directly from the API response
             if (analysisData.dashboardData && analysisData.dashboardData.length > 0) {
-                displayDashboard(analysisData.dashboardData, analysisData.executiveSummary, analysisData.aiAnalysisMemo);
+                displayDashboard(analysisData.dashboardData, analysisData.executiveSummary, analysisData.aiAnalysisMemo, analysisData.quantitativeAnalysis);
             } else {
                 throw new Error('No dashboard data generated');
             }
@@ -1306,7 +1394,7 @@
             ];
         }
 
-        function displayDashboard(data, executiveSummary, aiAnalysisMemo = '') {
+        function displayDashboard(data, executiveSummary, aiAnalysisMemo = '', quantitativeAnalysis = null) {
             allComments = data;
             
             // Process and display all components
@@ -1318,6 +1406,7 @@
             renderAIAnalysisMemo(aiAnalysisMemo, currentJobId);
             updateCourseDetails();
             updateGradeChart();
+            renderQuantitativeResults(quantitativeAnalysis);
             setupInteractivity();
             
             // Hide upload section and show dashboard
@@ -1372,16 +1461,23 @@
         }
 
         function updateCourseDetails() {
+            // Show blank values when "All Sections" is selected
+            if (currentSection === 'all') {
+                document.getElementById('detail-instructor').textContent = '-';
+                document.getElementById('detail-modality').textContent = '-';
+                document.getElementById('detail-term').textContent = '-';
+                document.getElementById('detail-enrollment').textContent = '-';
+                return;
+            }
+            
             let data = allComments;
             
-            // Filter by selected section if not "all" with type conversion
-            if (currentSection !== 'all') {
-                data = data.filter(d => {
-                    const commentSection = String(d.SectionNumber_ASU);
-                    const selectedSection = String(currentSection);
-                    return commentSection === selectedSection;
-                });
-            }
+            // Filter by selected section with type conversion
+            data = data.filter(d => {
+                const commentSection = String(d.SectionNumber_ASU);
+                const selectedSection = String(currentSection);
+                return commentSection === selectedSection;
+            });
             
             if (data.length === 0) {
                 document.getElementById('detail-instructor').textContent = '-';
@@ -1657,16 +1753,16 @@
         }
 
         function renderExecutiveSummary(executiveSummary) {
-            const takeawaysContent = document.getElementById('takeaways-content');
+            const executiveSummaryContent = document.getElementById('executive-summary-overlay-content');
             
             if (typeof executiveSummary === 'string' && executiveSummary.trim()) {
                 // Use marked.js to parse the markdown executive summary
                 try {
                     const htmlContent = marked.parse(executiveSummary);
-                    takeawaysContent.innerHTML = `<div class="executive-summary-content">${htmlContent}</div>`;
+                    executiveSummaryContent.innerHTML = `<div class="executive-summary-content">${htmlContent}</div>`;
                 } catch (error) {
                     console.warn('Markdown parsing failed, using plain text:', error);
-                    takeawaysContent.innerHTML = `<div class="executive-summary-content">${executiveSummary.replace(/\n/g, '<br>')}</div>`;
+                    executiveSummaryContent.innerHTML = `<div class="executive-summary-content">${executiveSummary.replace(/\n/g, '<br>')}</div>`;
                 }
             } else {
                 // Fallback to theme-based takeaways if no executive summary is available
@@ -1686,7 +1782,7 @@
                     return acc;
                 }, {});
 
-                takeawaysContent.innerHTML = `
+                executiveSummaryContent.innerHTML = `
                     <h3>Thematic Analysis Summary</h3>
                     <p><em>Executive summary generation is unavailable. Here's a thematic breakdown:</em></p>
                     ${Object.entries(themeGroups).map(([theme, info]) => `
@@ -1801,22 +1897,36 @@
         }
 
         function setupInteractivity() {
-            // Thematic takeaways toggle
-            const toggleButton = document.getElementById('toggle-takeaways');
-            const takeawaysContent = document.getElementById('takeaways-content');
-            const chevron = document.getElementById('takeaway-chevron');
+            // Executive Summary modal
+            const executiveSummaryBtn = document.getElementById('executive-summary-btn');
+            const executiveSummaryOverlay = document.getElementById('executive-summary-overlay');
+            const closeExecutiveSummary = document.getElementById('close-executive-summary');
 
-            toggleButton.addEventListener('click', () => {
-                const isHidden = takeawaysContent.classList.contains('hidden');
-                if (isHidden) {
-                    takeawaysContent.classList.remove('hidden');
-                    chevron.classList.add('rotate-180');
-                } else {
-                    takeawaysContent.classList.add('hidden');
-                    chevron.classList.remove('rotate-180');
-                }
-            });
+            if (executiveSummaryBtn) {
+                executiveSummaryBtn.addEventListener('click', () => {
+                    executiveSummaryOverlay.classList.remove('hidden');
+                    document.body.style.overflow = 'hidden';
+                });
+            }
 
+            if (closeExecutiveSummary) {
+                closeExecutiveSummary.addEventListener('click', () => {
+                    executiveSummaryOverlay.classList.add('hidden');
+                    document.body.style.overflow = 'auto';
+                });
+            }
+
+            // Close modal when clicking outside
+            if (executiveSummaryOverlay) {
+                executiveSummaryOverlay.addEventListener('click', (e) => {
+                    if (e.target === executiveSummaryOverlay) {
+                        executiveSummaryOverlay.classList.add('hidden');
+                        document.body.style.overflow = 'auto';
+                    }
+                });
+            }
+
+            // Thematic takeaways toggle (remove since Executive Summary moved to modal)
             // AI Analysis Memo modal
             const analysisMemoBtn = document.getElementById('analysis-memo-btn');
             const analysisMemoBtn2 = document.getElementById('analysis-memo-btn-thematic');
@@ -1858,9 +1968,17 @@
 
             // Close analysis memo modal with Escape key
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && !analysisMemoOverlay.classList.contains('hidden')) {
-                    analysisMemoOverlay.classList.add('hidden');
-                    document.body.style.overflow = 'auto';
+                if (e.key === 'Escape') {
+                    const executiveSummaryOverlay = document.getElementById('executive-summary-overlay');
+                    const analysisMemoOverlay = document.getElementById('analysis-memo-overlay');
+                    
+                    if (!executiveSummaryOverlay.classList.contains('hidden')) {
+                        executiveSummaryOverlay.classList.add('hidden');
+                        document.body.style.overflow = 'auto';
+                    } else if (!analysisMemoOverlay.classList.contains('hidden')) {
+                        analysisMemoOverlay.classList.add('hidden');
+                        document.body.style.overflow = 'auto';
+                    }
                 }
             });
         }
@@ -2039,6 +2157,263 @@
                 document.getElementById('upload-section').style.display = 'none';
             }
         }
+
+        // Quantitative Results Functions
+        function renderQuantitativeResults(quantitativeAnalysis) {
+            // Render quantitative analysis results
+            
+            const container = document.getElementById('quantitative-results-container');
+            const chartsWrapper = document.getElementById('quantitative-charts-wrapper');
+            const noDataDiv = document.getElementById('no-quantitative-data');
+            
+            console.log('Quantitative container elements found:', {
+                container: !!container,
+                chartsWrapper: !!chartsWrapper,
+                noDataDiv: !!noDataDiv
+            });
+            
+            if (!quantitativeAnalysis || !quantitativeAnalysis.sections) {
+                console.log('No quantitative analysis or sections found, hiding container');
+                container.classList.add('hidden');
+                return;
+            }
+            
+            // Process quantitative analysis data
+            
+            // Show the container and set up toggle functionality
+            container.classList.remove('hidden');
+            setupQuantitativeToggle();
+            
+            // Auto-expand the quantitative section when data is available
+            const quantitativeContent = document.getElementById('quantitative-content');
+            const quantitativeChevron = document.getElementById('quantitative-chevron');
+            if (quantitativeContent && quantitativeChevron) {
+                quantitativeContent.classList.remove('hidden');
+                quantitativeChevron.style.transform = 'rotate(180deg)';
+            }
+            
+            // Store globally for section filtering
+            window.quantitativeAnalysis = quantitativeAnalysis;
+            
+            // Initial render based on current section
+            updateQuantitativeDisplay();
+        }
+
+        function setupQuantitativeToggle() {
+            const toggleBtn = document.getElementById('toggle-quantitative');
+            const content = document.getElementById('quantitative-content');
+            const chevron = document.getElementById('quantitative-chevron');
+            
+            toggleBtn.addEventListener('click', function() {
+                const isHidden = content.classList.contains('hidden');
+                
+                if (isHidden) {
+                    content.classList.remove('hidden');
+                    chevron.style.transform = 'rotate(180deg)';
+                } else {
+                    content.classList.add('hidden');
+                    chevron.style.transform = 'rotate(0deg)';
+                }
+            });
+        }
+
+        function updateQuantitativeDisplay() {
+            if (!window.quantitativeAnalysis) return;
+            
+            const chartsWrapper = document.getElementById('quantitative-charts-wrapper');
+            const noDataDiv = document.getElementById('no-quantitative-data');
+            
+            // Check if a specific section is selected
+            if (currentSection === 'all') {
+                chartsWrapper.style.display = 'none';
+                noDataDiv.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-hand-pointer text-3xl mb-3"></i>
+                        <p class="text-lg font-medium">Select a specific section to view quantitative survey results</p>
+                        <p class="text-sm">Use the section filter above to choose a course section.</p>
+                    </div>
+                `;
+                noDataDiv.classList.remove('hidden');
+                return;
+            }
+            
+            // Find data for current section
+            const sectionData = window.quantitativeAnalysis.sections[currentSection];
+            
+            if (!sectionData || !sectionData.questions || Object.keys(sectionData.questions).length === 0) {
+                chartsWrapper.style.display = 'none';
+                noDataDiv.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-info-circle text-3xl mb-3"></i>
+                        <p class="text-lg">No quantitative survey data available for this section.</p>
+                        <p class="text-sm">This section may not have participated in the survey.</p>
+                    </div>
+                `;
+                noDataDiv.classList.remove('hidden');
+                return;
+            }
+            
+            // Clear previous charts and show content
+            chartsWrapper.innerHTML = '';
+            chartsWrapper.style.display = 'block';
+            noDataDiv.classList.add('hidden');
+            
+            // Render compact question summaries for each question
+            Object.entries(sectionData.questions).forEach(([questionKey, questionData]) => {
+                renderQuestionChart(questionKey, questionData);
+            });
+        }
+
+        function renderQuestionChart(questionKey, questionData) {
+            const chartDiv = document.createElement('div');
+            chartDiv.className = 'question-chart bg-gray-50 rounded-lg border border-gray-200';
+            
+            // Use actual question text from backend if available, otherwise derive from key
+            const questionText = questionData.question_text || 
+                questionKey
+                    .replace(/^q_/, '')
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, l => l.toUpperCase());
+            
+            const hasDeviation = questionData.deviation !== null && Math.abs(questionData.deviation) > 0.3;
+            const deviationClass = hasDeviation ? 
+                (questionData.deviation > 0 ? 'text-green-600' : 'text-red-600') : 
+                'text-gray-600';
+            
+            const uniqueId = `question-${questionKey.replace(/[^a-zA-Z0-9]/g, '')}`;
+            
+            chartDiv.innerHTML = `
+                <div class="p-4">
+                    <h4 class="text-base font-semibold text-gray-800 mb-3">${questionText}</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                        <div>
+                            <span class="text-gray-600">This Section:</span>
+                            <div class="font-semibold ${hasDeviation && questionData.deviation < 0 ? 'text-red-600' : hasDeviation ? 'text-green-600' : 'text-gray-800'}">
+                                ${questionData.this_section_score}/5
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">Peer Average:</span>
+                            <div class="font-semibold text-blue-600">
+                                ${questionData.peer_group_average !== null ? questionData.peer_group_average + '/5' : 'N/A'}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">Difference:</span>
+                            <div class="font-semibold ${deviationClass}">
+                                ${questionData.peer_group_average !== null ? 
+                                    (questionData.deviation > 0 ? '+' : '') + questionData.deviation : 
+                                    'Unique'}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">Responses:</span>
+                            <div class="font-semibold text-gray-800">${questionData.student_count}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Toggle button for response distribution -->
+                    <button 
+                        onclick="toggleResponseDistribution('${uniqueId}')" 
+                        class="mt-3 text-sm text-indigo-600 hover:text-indigo-800 flex items-center">
+                        <i id="${uniqueId}-chevron" class="fas fa-chevron-right mr-1 transition-transform"></i>
+                        View Response Distribution
+                    </button>
+                </div>
+                
+                <!-- Collapsible response distribution -->
+                <div id="${uniqueId}-distribution" class="hidden border-t border-gray-200 bg-white">
+                    <div class="p-4">
+                        <h5 class="text-sm font-medium text-gray-700 mb-3">Response Distribution:</h5>
+                        <div class="space-y-2" style="max-height: 200px; overflow-y: auto;">
+                            ${createDistributionBars(questionData.response_distribution, questionData.student_count, questionData.response_labels)}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('quantitative-charts-wrapper').appendChild(chartDiv);
+        }
+
+        function createDistributionBars(distribution, totalResponses, responseLabels) {
+            // Debug: Log the distribution data to console
+            // Distribution data successfully parsed from backend
+            
+            const responses = ['5', '4', '3', '2', '1'];
+            
+            // Use backend-provided response labels if available, otherwise default to Likert scale
+            const defaultLabels = {
+                '5': 'Strongly Agree',
+                '4': 'Agree', 
+                '3': 'Neutral',
+                '2': 'Disagree',
+                '1': 'Strongly Disagree'
+            };
+            const labels = responseLabels || defaultLabels;
+            
+            const colors = {
+                '5': 'bg-green-500',
+                '4': 'bg-green-300',
+                '3': 'bg-gray-400',
+                '2': 'bg-red-300', 
+                '1': 'bg-red-500'
+            };
+            
+            const distributionHTML = responses.map(score => {
+                // Handle backend string keys that are formatted as "5.0", "4.0", etc.
+                const stringKey = score;                           // "5"
+                const stringKeyWithDecimal = score + ".0";         // "5.0"  
+                const intKey = parseInt(score);                    // 5
+                const floatKey = parseFloat(score);                // 5.0
+                
+                const count = distribution[stringKey] || 
+                             distribution[stringKeyWithDecimal] || 
+                             distribution[intKey] || 
+                             distribution[floatKey] || 0;
+                             
+                const percentage = totalResponses > 0 ? (count / totalResponses * 100) : 0;
+                
+                // Note: Backend sends distribution keys as "5.0", "4.0", etc.
+                
+                return `
+                    <div class="flex items-center">
+                        <div class="w-32 text-sm text-gray-600 text-right pr-3">
+                            ${labels[score] || score}
+                        </div>
+                        <div class="flex-1 bg-gray-200 rounded-full h-6 relative">
+                            <div class="${colors[score]} h-6 rounded-full flex items-center justify-end pr-2" 
+                                 style="width: ${Math.max(percentage, count > 0 ? 8 : 0)}%">
+                                ${count > 0 ? `<span class="text-white text-xs font-medium">${count}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="w-12 text-sm text-gray-600 text-right pl-2">
+                            ${percentage.toFixed(0)}%
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            return distributionHTML;
+        }
+
+        function toggleResponseDistribution(uniqueId) {
+            const distributionDiv = document.getElementById(`${uniqueId}-distribution`);
+            const chevron = document.getElementById(`${uniqueId}-chevron`);
+            
+            if (distributionDiv.classList.contains('hidden')) {
+                distributionDiv.classList.remove('hidden');
+                chevron.style.transform = 'rotate(90deg)';
+            } else {
+                distributionDiv.classList.add('hidden');
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Update section filter to also update quantitative display
+        const originalSectionFilterHandler = document.getElementById('section-filter').onchange;
+        document.getElementById('section-filter').addEventListener('change', function() {
+            updateQuantitativeDisplay();
+        });
     </script>
 </body>
 </html> 

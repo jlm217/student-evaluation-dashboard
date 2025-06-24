@@ -364,4 +364,366 @@ This updated section reflects the shift to an in-memory, JSON-based data flow as
 
     [ ] 3. (No Change Needed) Component Rendering:
 
-        [ ] The rest of the component logic remains the same, as it will just be mapping over the JSON data it now receives. 
+        [ ] The rest of the component logic remains the same, as it will just be mapping over the JSON data it now receives.
+
+---
+
+## Phase 4: Quantitative Survey Data Integration (NEW MAJOR FEATURE)
+
+This section implements the comprehensive quantitative data stream integration with dynamic peer group benchmarking as outlined in the updated PRD.
+
+### Part 1: Backend Development (Python)
+
+#### Section 1: Data Cleaning & Transformation
+
+    [ ] 1. Create the Likert Cleaning Function (data_cleaner.py):
+
+        [ ] Define a new function: `clean_likert_file(input_path)`.
+
+        [ ] Inside, load the CSV into a pandas DataFrame.
+
+        [ ] Create a mapping dictionary to convert Likert text responses to standardized numerical scale:
+            - "Strongly Agree" → 5
+            - "Agree" → 4  
+            - "Neutral" / "Neither Agree nor Disagree" → 3
+            - "Disagree" → 2
+            - "Strongly Disagree" → 1
+            - "Yes" → 1, "No" → 0 (for non-Likert questions)
+
+        [ ] Create a standardization function to generate clean "question keys" from raw QUESTION text:
+            - Convert to lowercase
+            - Remove punctuation and special characters
+            - Replace spaces with underscores
+            - Add "q_" prefix (e.g., "The instructor was effective" → "q_instructor_effective")
+
+        [ ] Use pandas `pivot_table()` function to transform from long format to wide format:
+            - Index: ['eval_username', 'SectionNumber_ASU'] (to maintain student-section relationship)
+            - Columns: clean question keys  
+            - Values: numeric responses
+            - Aggfunc: 'first' (in case of duplicates)
+
+        [ ] Handle missing data gracefully (fill NaN values appropriately).
+
+        [ ] Return the cleaned, wide-format DataFrame.
+
+#### Section 2: Peer Group Analysis & Benchmarking
+
+    [ ] 2. Create the Analysis & Benchmarking Function (pipeline.py):
+
+        [ ] Define a new function: `analyze_quantitative_questions(cleaned_likert_df)`.
+
+        [ ] **Peer Group Averages Calculation**:
+            - Loop through all question columns in the cleaned DataFrame
+            - For each question, identify all sections that asked it (non-null values)
+            - Calculate the overall mean score across all students who answered that question
+            - Store results in a dictionary: `{'q_instructor_effective': 4.2, 'q_workload_manageable': 3.1, ...}`
+
+        [ ] **Section-Level Analysis**:
+            - Group the cleaned_likert_df by 'SectionNumber_ASU'
+            - For each section and each question column:
+                * Calculate the section-specific average score
+                * Calculate response distribution (count of each response value)
+                * Convert counts to percentages for easier interpretation
+            - Handle sections with insufficient data (< 3 responses) appropriately
+
+        [ ] **Benchmarking Logic**:
+            - For each section-question combination, compare section score to relevant peer group average
+            - Identify significant deviations (e.g., >1.0 point difference)
+            - Flag questions that were unique to a section (no peer comparison available)
+
+        [ ] Return a structured dictionary mapping each section number to its detailed quantitative analysis:
+            ```python
+            {
+                "47666": {
+                    "questions_analyzed": ["q_instructor_effective", "q_workload_manageable"],
+                    "question_details": {
+                        "q_instructor_effective": {
+                            "this_section_score": 4.2,
+                            "peer_group_average": 4.1,
+                            "response_distribution": {"5": 40, "4": 30, "3": 20, "2": 10, "1": 0},
+                            "response_count": 20,
+                            "significant_deviation": False
+                        }
+                    }
+                }
+            }
+            ```
+
+#### Section 3: Pipeline Integration
+
+    [ ] 3. Update the Main Pipeline Orchestrator (pipeline.py):
+
+        [ ] Add a new optional parameter `likert_file_path` to the `run_pipeline` function signature.
+
+        [ ] **Conditional Processing Logic**:
+            - If `likert_file_path` is provided and file exists:
+                * Call `clean_likert_file(likert_file_path)` 
+                * Call `analyze_quantitative_questions(cleaned_likert_df)`
+                * Store quantitative analysis results for later integration
+            - If not provided, set quantitative analysis results to None
+
+        [ ] **Error Handling**:
+            - Handle file format errors gracefully
+            - Log issues with Likert data processing
+            - Ensure pipeline continues even if quantitative analysis fails
+
+    [ ] 4. Update the Hybrid JSON Payload Creation (pipeline.py):
+
+        [ ] Modify `create_hybrid_summary_json` function signature to accept quantitative analysis results.
+
+        [ ] **Payload Enrichment Logic**:
+            - For each section in the `quantitative_summary` array:
+                * Look up the section's quantitative analysis data
+                * If found, add new `likert_summary` key with structured data:
+                ```json
+                "likert_summary": [
+                    {
+                        "question_text": "The workload for this course was manageable.",
+                        "question_key": "q_workload_manageable", 
+                        "this_section_score": 2.2,
+                        "peer_group_average": 4.1,
+                        "response_distribution": {
+                            "Strongly Agree": 2, "Agree": 8, "Neutral": 10, 
+                            "Disagree": 15, "Strongly Disagree": 10
+                        },
+                        "response_count": 45,
+                        "significant_deviation": true,
+                        "deviation_magnitude": -1.9
+                    }
+                ]
+                ```
+                * If no quantitative data available, set `likert_summary: []`
+
+        [ ] **Token Optimization**:
+            - Ensure enriched payload remains within model token limits
+            - Prioritize questions with significant deviations
+            - Consider truncating response distributions if necessary
+
+#### Section 4: Executive Summary Enhancement
+
+    [ ] 5. Update the Executive Summary Prompt (pipeline.py):
+
+        [ ] **Enhanced Prompt Instructions**:
+            - Add specific instruction to analyze `likert_summary` data in correlation with qualitative themes
+            - Direct the AI to identify significant deviations (where `significant_deviation: true`)
+            - Request explicit correlation between quantitative deviations and qualitative sentiment patterns
+            - Ask for statistical validation of qualitative themes where applicable
+
+        [ ] **Example Prompt Addition**:
+            ```
+            "QUANTITATIVE CORRELATION ANALYSIS:
+            For each section, examine the likert_summary data. Pay special attention to:
+            1. Questions where this_section_score deviates significantly from peer_group_average (deviation_magnitude > 1.0 or < -1.0)
+            2. Correlate these quantitative deviations with the qualitative themes for the same section
+            3. Validate or contradict qualitative findings with quantitative evidence
+            4. Highlight cases where qualitative sentiment aligns or conflicts with quantitative ratings
+            
+            Example analysis: 'Section 47666 showed negative qualitative themes around workload (15 comments coded as Excessive Workload), which is statistically validated by their quantitative rating of 2.2/5 on workload manageability, significantly below the peer average of 4.1.'"
+            ```
+
+### Part 2: Frontend Development (index.html)
+
+#### Section 1: Upload Interface Enhancement
+
+    [ ] 1. Update the Upload UI:
+
+        [ ] Add a fourth file input element for "Quantitative Survey Data (Optional)":
+            - Clear labeling: "Quantitative Survey Data (Likert Scale Responses) - Optional"
+            - Accept .csv files only
+            - Include help text explaining the expected format
+            - Visual indication that this field is optional
+
+        [ ] Update the `handleFileSelect` JavaScript function:
+            - Add handling for the new Likert file input
+            - Validate file format (CSV only)
+            - Update form validation to allow submission with or without Likert data
+            - Provide user feedback on file selection status
+
+#### Section 2: Dashboard UI Components
+
+    [ ] 2. Create the Quantitative Results Module HTML:
+
+        [ ] Add new container in main dashboard: `<div id="quantitative-results-container" style="display: none;"></div>`
+
+        [ ] **Module Structure**:
+            ```html
+            <div id="quantitative-results-container" class="dashboard-module">
+                <h3>📊 Quantitative Survey Results</h3>
+                <div id="quantitative-charts-wrapper">
+                    <!-- Dynamic charts will be inserted here -->
+                </div>
+                <div id="no-quantitative-data" style="display: none;">
+                    <p>No quantitative survey data available for this section.</p>
+                </div>
+            </div>
+            ```
+
+#### Section 3: Dynamic Visualization Logic
+
+    [ ] 3. Update the Main Rendering Logic:
+
+        [ ] Modify the main `render()` function to call `renderQuantitativeResults()` after analysis completion.
+
+        [ ] Update section selection logic to refresh quantitative results when user changes selected section.
+
+    [ ] 4. Create the renderQuantitativeResults Function:
+
+        [ ] **Core Function Logic**:
+            ```javascript
+            function renderQuantitativeResults(selectedSection) {
+                const container = document.getElementById('quantitative-results-container');
+                const chartsWrapper = document.getElementById('quantitative-charts-wrapper');
+                const noDataDiv = document.getElementById('no-quantitative-data');
+                
+                // Find likert_summary for selected section
+                const sectionData = analysisData.quantitative_summary.find(
+                    section => section.SectionNumber_ASU === selectedSection
+                );
+                
+                if (!sectionData || !sectionData.likert_summary || sectionData.likert_summary.length === 0) {
+                    // Show no data message
+                    container.style.display = 'block';
+                    chartsWrapper.style.display = 'none';
+                    noDataDiv.style.display = 'block';
+                    return;
+                }
+                
+                // Clear previous charts and render new ones
+                chartsWrapper.innerHTML = '';
+                sectionData.likert_summary.forEach(question => renderQuestionChart(question));
+                
+                container.style.display = 'block';
+                chartsWrapper.style.display = 'block';
+                noDataDiv.style.display = 'none';
+            }
+            ```
+
+        [ ] **Individual Question Chart Rendering**:
+            ```javascript
+            function renderQuestionChart(questionData) {
+                const chartDiv = document.createElement('div');
+                chartDiv.className = 'question-chart';
+                
+                // Chart HTML with bars for response distribution
+                chartDiv.innerHTML = `
+                    <div class="question-header">
+                        <h4>${questionData.question_text}</h4>
+                        <div class="score-comparison">
+                            <span class="section-score ${questionData.significant_deviation ? 'significant' : ''}">
+                                This Section: ${questionData.this_section_score.toFixed(1)}
+                            </span>
+                            ${questionData.peer_group_average ? 
+                                `<span class="peer-average">Peer Average: ${questionData.peer_group_average.toFixed(1)}</span>` 
+                                : '<span class="unique-question">Unique to this section</span>'
+                            }
+                        </div>
+                    </div>
+                    <div class="response-distribution">
+                        ${createDistributionBars(questionData.response_distribution, questionData.response_count)}
+                    </div>
+                `;
+                
+                document.getElementById('quantitative-charts-wrapper').appendChild(chartDiv);
+            }
+            ```
+
+        [ ] **Response Distribution Visualization**:
+            - Create horizontal bar chart showing percentage breakdown of responses
+            - Color-code bars (green for positive, red for negative, gray for neutral)
+            - Include percentage labels and response counts
+            - Highlight significant deviations with visual indicators
+
+#### Section 4: CSS Styling
+
+    [ ] 5. Add Quantitative Module Styling:
+
+        [ ] **Module Styling**:
+            ```css
+            .dashboard-module {
+                margin: 20px 0;
+                padding: 20px;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                background: white;
+            }
+            
+            .question-chart {
+                margin-bottom: 30px;
+                padding: 15px;
+                border-left: 4px solid #007bff;
+                background: #f8f9fa;
+            }
+            
+            .score-comparison {
+                display: flex;
+                gap: 20px;
+                margin: 10px 0;
+            }
+            
+            .section-score.significant {
+                color: #dc3545;
+                font-weight: bold;
+            }
+            
+            .response-distribution {
+                margin-top: 15px;
+            }
+            
+            .distribution-bar {
+                display: flex;
+                align-items: center;
+                margin: 5px 0;
+            }
+            ```
+
+### Part 3: Testing & Quality Assurance
+
+    [ ] 6. Comprehensive Testing Strategy:
+
+        [ ] **Unit Testing**:
+            - Test `clean_likert_file()` with various input formats
+            - Test `analyze_quantitative_questions()` with edge cases (single section, missing data)
+            - Test peer group calculation accuracy
+            - Test JSON payload structure and token limits
+
+        [ ] **Integration Testing**:
+            - Test full pipeline with and without Likert data
+            - Test dashboard rendering with various data scenarios
+            - Test error handling when Likert file is malformed
+
+        [ ] **User Acceptance Testing**:
+            - Test upload workflow with optional Likert file
+            - Verify visualization accuracy and clarity
+            - Test correlation insights in executive summary
+
+        [ ] **Performance Testing**:
+            - Test with large Likert datasets (1000+ responses)
+            - Monitor memory usage during pivot operations
+            - Ensure dashboard responsiveness with complex visualizations
+
+### Part 4: Documentation & Deployment
+
+    [ ] 7. Enhanced Documentation:
+
+        [ ] Update README.md with quantitative integration instructions
+        [ ] Document expected Likert file format and requirements
+        [ ] Add troubleshooting guide for common quantitative data issues
+        [ ] Include examples of quantitative insights in executive summaries
+
+    [ ] 8. Deployment Considerations:
+
+        [ ] Ensure backward compatibility (system works without Likert data)
+        [ ] Test memory requirements with new data processing
+        [ ] Update error logging for quantitative analysis failures
+        [ ] Consider data validation and user feedback for file format issues
+
+---
+
+## Success Criteria & Validation
+
+- [ ] **Quantitative Integration**: Pipeline successfully processes Likert data and calculates peer group benchmarks
+- [ ] **Correlation Analysis**: Executive summaries demonstrate clear correlations between qualitative themes and quantitative deviations  
+- [ ] **Dashboard Enhancement**: Users can visualize quantitative results with peer comparisons for selected sections
+- [ ] **Performance Maintenance**: Processing time increases by <20% with quantitative data integration
+- [ ] **User Experience**: Upload workflow accommodates optional Likert file without confusion
+- [ ] **Statistical Accuracy**: Peer group calculations and deviations are mathematically correct and meaningful 
