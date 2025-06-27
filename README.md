@@ -1,230 +1,162 @@
-# AI-Assisted Qualitative Analysis Workflow
+# Qualitative Coding Agent
 
-This project provides a complete Python-based workflow for automating qualitative data analysis using AI. The system processes raw survey export data through three integrated phases: data cleaning, initial coding, and thematic analysis.
-
-## Overview
-
-The workflow consists of three main phases:
-
-1. **Phase 0: Data Formatting & Cleaning Agent** - Transforms raw, poorly structured survey exports into clean, standardized CSV format
-2. **Phase 1: Initial Coding Agent** - Automatically generates initial codes and sentiment analysis for question-answer pairs using Google's Gemini API
-3. **Phase 2: Thematic Analysis Agent** - Synthesizes initial codes into higher-level themes and generates comprehensive reports
+An AI-powered tool for automated qualitative data analysis using Google's Gemini API. This application provides automated open coding, thematic analysis, and executive summary generation for survey response data.
 
 ## Features
 
-### Phase 0: Data Cleaning
-- **Multi-format Support**: Handles CSV, TXT, and space-delimited files
-- **Header Management**: Automatically detects or assigns proper column headers
-- **Column Selection**: Extracts only essential columns (course number, section, question, response)
-- **Data Deduplication**: Removes duplicate question-response pairs
-- **Whitespace Cleaning**: Trims and standardizes text formatting
-- **Flexible Parsing**: Robust handling of various delimiter formats
+- **Automated Open Coding**: Uses AI to generate initial codes for qualitative responses
+- **Thematic Analysis**: Groups codes into meaningful themes  
+- **Executive Summary Generation**: Creates comprehensive narrative summaries
+- **Real-time Progress Tracking**: WebSocket-based progress updates
+- **Interactive Dashboard**: Web-based interface for data exploration
+- **Conversational Data Exploration**: Chat with your analyzed data
 
-### Phase 1: Initial Coding
-- **AI-Powered Coding**: Uses Google's Gemini API for intelligent code generation
-- **Batch Processing**: Processes data in configurable batches for cost efficiency
-- **Sentiment Analysis**: Automatically determines sentiment (Positive, Negative, Neutral)
-- **Error Handling**: Robust error handling for API issues and malformed responses
-- **Progress Tracking**: Real-time progress bars for batch processing
+## Quick Start
 
-### Phase 2: Thematic Analysis
-- **Theme Generation**: Groups related codes into overarching themes
-- **Multiple Outputs**: Generates markdown reports, CSV summaries, and themed datasets
-- **Comprehensive Mapping**: Links each original response to its final theme
-- **Statistical Summary**: Provides counts and distributions of codes and themes
+### Local Development
 
-### Integrated Pipeline
-- **Seamless Workflow**: Automated progression from raw data to final analysis
-- **Flexible Execution**: Run individual phases or the complete pipeline
-- **Command-line Interface**: Easy-to-use CLI with multiple options
-- **Error Recovery**: Robust error handling with clear feedback
-
-## Setup
-
-### 1. Create Virtual Environment
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-### 2. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Configure API Key
-
-1. Get a Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Create a `.env` file in the project root:
+1. **Clone the repository**
    ```bash
-   touch .env
-   ```
-3. Add your API key to `.env`:
-   ```
-   GEMINI_API_KEY=your_actual_api_key_here
+   git clone <your-repo-url>
+   cd qualitative-coding-agent
    ```
 
-## Usage
+2. **Set up environment**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-### Complete Pipeline (Recommended)
+3. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your GEMINI_API_KEY
+   ```
 
-Run the full three-phase pipeline on raw data:
+4. **Run the application**
+   ```bash
+   python3 -m uvicorn app:app --host 0.0.0.0 --port 8080 --reload
+   ```
 
-```bash
-python pipeline.py your_raw_data.csv
-```
+5. **Access the application**
+   - Open http://localhost:8080 in your browser
+   - Upload your CSV files and start analysis
 
-This will automatically:
-1. Clean and format your raw data
-2. Generate initial codes and sentiment analysis
-3. Create themes and comprehensive reports
+### Deployment on Render
 
-### Individual Phases
+This application is configured for easy deployment on Render.com:
 
-#### Phase 0 Only (Data Cleaning)
-```bash
-python pipeline.py raw_data.csv --only-phase0
-# or
-python formatter.py raw_data.csv
-```
+1. **Fork this repository** to your GitHub account
 
-#### Phase 1 Only (Initial Coding)
-```bash
-python pipeline.py clean_data.csv --only-phase1 --skip-phase0
-# or
-python main.py  # Interactive mode
-```
+2. **Connect to Render**
+   - Go to [render.com](https://render.com) and sign up
+   - Connect your GitHub account
+   - Create a new Web Service from your forked repository
 
-#### Phase 2 Only (Thematic Analysis)
-```bash
-python pipeline.py coded_data.csv --only-phase2 --skip-phase0 --skip-phase1
-# or
-python thematic_analyzer.py  # Interactive mode
-```
+3. **Set Environment Variables**
+   - In Render dashboard, add the following environment variable:
+     - `GEMINI_API_KEY`: Your Google Gemini API key
 
-### Skip Specific Phases
+4. **Deploy**
+   - Render will automatically deploy using the `render.yaml` configuration
+   - Your app will be available at your Render URL
 
-```bash
-# Skip data cleaning (if data is already clean)
-python pipeline.py clean_data.csv --skip-phase0
+## API Documentation
 
-# Skip thematic analysis (stop after coding)
-python pipeline.py raw_data.csv --skip-phase2
-```
+### Core Endpoints
 
-## Input Formats
+- `POST /api/v2/analyze-with-progress` - Upload files and start analysis with WebSocket progress
+- `GET /api/v2/job/{job_id}/status` - Check analysis job status  
+- `GET /api/v2/download/{job_id}` - Download processed CSV results
+- `POST /api/v2/chat` - Chat with analyzed data
+- `GET /api/health` - Health check endpoint
 
-### Raw Data (Phase 0 Input)
-Phase 0 can handle various formats:
-- Standard CSV files with headers
-- Space-delimited text files
-- Tab-delimited files
-- Files without headers (will assign automatically)
+### WebSocket Endpoint
 
-### Clean Data (Phase 1 Input)
-CSV files with these essential columns:
-- `crs_number`: Course identifier
-- `SectionNumber_ASU`: Section number
-- `question`: The survey question
-- `response`: The student's response
-
-### Coded Data (Phase 2 Input)
-CSV files from Phase 1 with additional columns:
-- `Initial_Code`: Generated codes from Phase 1
-- `Sentiment`: Sentiment analysis (Positive/Negative/Neutral)
-
-## Output Files
-
-The pipeline generates multiple output files:
-
-### Phase 0 Outputs
-- `[filename]_cleaned.csv`: Clean, standardized data ready for Phase 1
-
-### Phase 1 Outputs
-- `[filename]_coded.csv`: Original data with initial codes and sentiment analysis
-
-### Phase 2 Outputs
-- `[filename]_themed.csv`: Complete dataset with theme assignments
-- `themes_report.md`: Detailed markdown report of all themes
-- `themes_summary.csv`: Summary table of themes and descriptions
-
-## Example Workflow
-
-```bash
-# Complete pipeline from raw export to final analysis
-python pipeline.py CommentsRAW_SAMPLE.csv
-```
-
-**Sample Output:**
-```
-================================================================================
-🔬 QUALITATIVE ANALYSIS PIPELINE
-================================================================================
-
-📋 PHASE 0: DATA FORMATTING & CLEANING
---------------------------------------------------
-Loading raw data from: CommentsRAW_SAMPLE.csv
-Successfully loaded CSV with 94 rows and 12 columns
-Selected 4 essential columns: ['crs_number', 'SectionNumber_ASU', 'question', 'response']
-Removed 10 duplicate entries (94 -> 84 rows)
-✅ Phase 0 completed successfully!
-
-🤖 PHASE 1: AI-ASSISTED INITIAL CODING
---------------------------------------------------
-Processing 80 rows in 4 batches of 20
-✅ Phase 1 completed successfully!
-   Successfully coded: 80/80 rows
-
-🎯 PHASE 2: THEMATIC ANALYSIS & REPORTING
---------------------------------------------------
-Generated 8 themes from 76 unique codes
-✅ Phase 2 completed successfully!
-
-🎉 PIPELINE COMPLETED SUCCESSFULLY!
-```
-
-## Configuration
-
-### Batch Size
-Modify `BATCH_SIZE` in `pipeline.py` to adjust API batch processing (default: 20)
-
-### Column Names
-The system expects these column names after Phase 0:
-- `question`: Survey questions
-- `response`: Student responses
-
-## Error Handling
-
-The pipeline handles various error conditions:
-- **Phase 0**: Invalid file formats, missing data, parsing errors
-- **Phase 1**: Missing API key, network issues, malformed responses
-- **Phase 2**: Missing codes, API failures, file I/O errors
-
-Each phase provides clear error messages and stops execution if critical errors occur.
-
-## Performance Tips
-
-1. **Use appropriate batch sizes**: Larger batches are more efficient but may hit API limits
-2. **Clean data first**: Run Phase 0 on raw data to improve downstream processing
-3. **Monitor API usage**: The system includes rate limiting to prevent API abuse
-4. **Process in stages**: For large datasets, consider running phases separately
+- `WS /ws/progress/{job_id}` - Real-time progress updates during analysis
 
 ## File Structure
 
 ```
 qualitative-coding-agent/
-├── pipeline.py              # Main integrated pipeline
-├── formatter.py             # Phase 0: Data cleaning
-├── main.py                  # Phase 1: Initial coding
-├── thematic_analyzer.py     # Phase 2: Thematic analysis
-├── requirements.txt         # Python dependencies
-├── .env                     # API configuration (create this)
-├── README.md               # This file
-└── [output files]          # Generated analysis results
+├── app.py                 # FastAPI web application
+├── main.py               # CLI version for direct processing
+├── pipeline.py           # Core processing pipeline
+├── thematic_analyzer.py  # Thematic analysis logic
+├── data_cleaner.py       # Data cleaning utilities
+├── formatter.py          # Output formatting
+├── frontend/            # React frontend files
+├── requirements.txt     # Python dependencies
+├── .env.example        # Environment variables template
+└── render.yaml         # Render deployment configuration
 ```
+
+## Data Privacy & Security
+
+### What's Included in Repository
+- ✅ Application code and configuration
+- ✅ Sample/demo data (anonymized)
+- ✅ Documentation and setup instructions
+
+### What's Excluded (.gitignore)
+- ❌ API keys and secrets (.env files)
+- ❌ Real survey data (*.csv files)
+- ❌ Virtual environments and cache files
+- ❌ IDE configuration files
+
+### Security Best Practices
+- API keys are loaded from environment variables only
+- Real data files are excluded from version control
+- Sample data is anonymized and suitable for public viewing
+- CORS is configured for production deployment
+
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GEMINI_API_KEY` | Google Gemini API key for AI processing | Yes |
+| `ENVIRONMENT` | Runtime environment (development/production) | No |
+| `PORT` | Server port (default: 8080) | No |
+| `HOST` | Server host (default: 0.0.0.0) | No |
+
+## Sample Data Format
+
+The application expects CSV files with these columns:
+- `question`: The survey question text
+- `response`: The student/participant response
+- Additional columns for metadata (course info, demographics, etc.)
+
+## Development
+
+### Running Tests
+```bash
+# Add test commands here when implemented
+python -m pytest
+```
+
+### Code Style
+This project follows Python best practices:
+- FastAPI for API development
+- Async/await for I/O operations
+- Type hints throughout
+- Environment-based configuration
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## License
 
-This project is provided as-is for research purposes. 
+[Add your license information here]
+
+## Support
+
+For issues and questions:
+- Check the GitHub Issues page
+- Review the documentation above
+- Ensure your environment variables are correctly configured 

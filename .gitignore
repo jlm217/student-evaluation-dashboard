@@ -1,5 +1,7 @@
 # Environment variables
 .env
+.env.local
+.env.production
 
 # Python
 __pycache__/
@@ -38,6 +40,26 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Data files (optional - you may want to track some)
+# Data files - exclude real data, keep samples
 *.csv
-!sample_data.csv 
+!CommentsRAW_SAMPLE.csv
+!sample_*.csv
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Logs
+*.log
+logs/
+
+# Cache directories
+.cache/
+.pytest_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.* 
