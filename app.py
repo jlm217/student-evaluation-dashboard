@@ -6,6 +6,7 @@ This serves the React frontend and provides API endpoints for:
 - In-memory pipeline processing
 - Dashboard data in JSON format
 - On-demand CSV downloads
+- Conversational chatbot for data exploration
 """
 
 import os
@@ -16,7 +17,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from io import StringIO
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
@@ -28,8 +29,9 @@ import json
 import pandas as pd
 import numpy as np
 import asyncio
+import google.generativeai as genai
 
-from pipeline import run_pipeline, run_pipeline_with_progress
+from pipeline import run_pipeline, run_pipeline_with_progress, create_hybrid_summary_json
 
 # Initialize FastAPI app
 app = FastAPI(title="Qualitative Coding Agent v2", version="2.0.0")
@@ -85,6 +87,18 @@ class ProcessRequest(BaseModel):
     grades_file_path: Optional[str] = None
     question_col: str = "question"
     answer_col: str = "response"
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: Optional[str] = None
+
+
+class ChatRequest(BaseModel):
+    job_id: str
+    message: str
+    chat_history: List[ChatMessage] = []
 
 
 def cleanup_cache():
@@ -533,6 +547,108 @@ async def get_cache_stats():
             for job_id, entry in DATA_CACHE.items()
         ]
     }
+
+
+@app.post("/api/v2/chat")
+async def chat_with_data(request: ChatRequest):
+    """
+    Conversational chatbot endpoint that answers questions about the analyzed data.
+    Uses the same hybrid data model that informed the executive summary.
+    """
+    try:
+        # Validate that the job_id exists in cache
+        if request.job_id not in DATA_CACHE:
+            raise HTTPException(status_code=404, detail="Job ID not found or data has expired.")
+        
+        # Retrieve the cached data
+        cache_entry = DATA_CACHE[request.job_id]
+        final_df = cache_entry["data"]
+        metadata = cache_entry["metadata"]
+        
+        print(f"🤖 Processing chat request for job {request.job_id}")
+        print(f"   User message: {request.message[:100]}...")
+        print(f"   Chat history length: {len(request.chat_history)}")
+        
+        # Generate the hybrid data payload (same as executive summary)
+        # Note: We don't have direct access to likert_analysis here, but the final_df should contain
+        # all the merged data including quantitative analysis if it was provided
+        hybrid_data = create_hybrid_summary_json(final_df)
+        
+        # Convert to JSON string for the prompt
+        data_json = json.dumps(hybrid_data, indent=2, default=str)
+        
+        # Build chat history string for context
+        chat_context = ""
+        if request.chat_history:
+            chat_context = "\n\nCONVERSATION HISTORY:\n"
+            for msg in request.chat_history[-5:]:  # Last 5 messages for context
+                role_label = "User" if msg.role == "user" else "Assistant"
+                chat_context += f"{role_label}: {msg.content}\n"
+        
+        # Construct the chatbot prompt
+        chatbot_prompt = f"""
+Role and Goal: You are an expert educational data analyst and student success specialist. Your purpose is to help department heads and instructors explore and understand the provided course analysis data. You are helpful, data-driven, and precise. Your knowledge is strictly limited to the JSON data provided in this prompt.
+
+Core Instructions:
+
+1. **Answer from the Data**: Base all of your answers on the qualitative_data and quantitative_summary provided below. Do not use any outside knowledge.
+
+2. **Acknowledge Limitations**: If the user asks a question that cannot be answered from the provided data, you MUST say so clearly. Do not make up or infer information. State "I cannot answer that question with the data I have."
+
+3. **Be Conversational**: Use the provided chat_history to understand the context of the user's questions and refer to previous points in the conversation when appropriate.
+
+4. **Cite Your Sources**: When you provide a specific insight, briefly mention the source. For example:
+   - "Based on the quantitative summary, section 47666 had a high DEW rate of 21.5%."
+   - "A student in the qualitative feedback for that section mentioned, 'The workload was overwhelming...'"
+
+5. **Privacy First**: Do not invent or reveal any personally identifiable information. Refer to instructors by their last name as provided in the data (e.g., "A. Smith").
+
+Current User Question: {request.message}
+
+Data for Analysis:
+
+Here is the complete analysis data. Use this as your single source of truth.
+
+{data_json}
+
+Conversation History:
+
+Here is the history of the current conversation. Use it to understand follow-up questions.
+
+{chat_context}"""
+
+        # Configure Gemini API (assuming API key is set via environment variable)
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+        genai.configure(api_key=api_key)
+        
+        # Make the API call to Gemini
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(chatbot_prompt)
+        
+        assistant_response = response.text.strip()
+        
+        print(f"✅ Chat response generated ({len(assistant_response)} characters)")
+        
+        # Create response with timestamp
+        chat_response = ChatMessage(
+            role="assistant",
+            content=assistant_response,
+            timestamp=datetime.now().isoformat()
+        )
+        
+        return {
+            "success": True,
+            "response": chat_response,
+            "job_id": request.job_id
+        }
+        
+    except Exception as e:
+        print(f"❌ Chat error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Chat service error: {str(e)}")
 
 
 # Mount static files for frontend

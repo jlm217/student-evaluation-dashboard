@@ -249,12 +249,27 @@
             min-height: 400px;
             max-width: 600px;
             max-height: 80vh;
+            cursor: move;
         }
         
-        /* Resize handle styling */
-        .chat-panel::-webkit-resizer {
+        /* Custom resize handle positioned at bottom-left center */
+        .chat-panel::before {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 20px;
             background: linear-gradient(-45deg, transparent 40%, #cbd5e1 40%, #cbd5e1 60%, transparent 60%);
-            border-radius: 0 0 16px 0;
+            cursor: nw-resize;
+            z-index: 1000;
+            border-radius: 3px;
+        }
+        
+        /* Hide default webkit resizer */
+        .chat-panel::-webkit-resizer {
+            display: none;
         }
         
         .chat-panel.open {
@@ -271,6 +286,12 @@
             display: flex;
             align-items: center;
             justify-content: between;
+            cursor: grab;
+            user-select: none;
+        }
+        
+        .chat-header:active {
+            cursor: grabbing;
         }
         
         .chat-messages {
@@ -729,11 +750,14 @@
                     <h3 class="font-bold text-xl mb-4 text-gray-900">
                         <i class="fas fa-info-circle mr-2 text-indigo-500"></i>Course Details
                     </h3>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm" id="course-details">
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm" id="course-details">
+                        <!-- HIDDEN: Instructor details -->
+                        <!--
                         <div class="text-center">
                             <div class="text-2xl font-bold text-indigo-600" id="detail-instructor">-</div>
                             <div class="text-gray-600">Instructor</div>
                         </div>
+                        -->
                         <div class="text-center">
                             <div class="text-2xl font-bold text-green-600" id="detail-modality">-</div>
                             <div class="text-gray-600">Modality</div>
@@ -883,104 +907,166 @@
                 </button>
             </div>
 
-            <div class="px-6 py-6 space-y-8">
-                <div>
-                    <p class="text-gray-700 text-lg leading-relaxed">
-                        This dashboard uses a structured, AI-assisted process to analyze both student comments and survey responses. It helps identify what students said, how they rated the course, and what patterns can inform course improvement.
+            <div class="px-8 py-8 space-y-12">
+                <!-- Introduction -->
+                <div class="text-center">
+                    <p class="text-gray-600 text-lg leading-relaxed max-w-3xl mx-auto">
+                        Our methodology follows a systematic six-phase progression that transforms individual student comments into comprehensive strategic insights, with each phase building upon the previous to ensure reliable, actionable results.
                     </p>
                 </div>
 
                 <!-- Phase 0 -->
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 0: Data Cleaning</h3>
-                    <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>Standardize columns:</strong> Maps varied column names (e.g., "Q", "question") to a consistent format.</li>
-                        <li><strong>Clean up text:</strong> Fixes spacing, symbols, or formatting issues.</li>
-                        <li><strong>Find duplicates:</strong> Detects and removes repeated responses.</li>
-                    </ul>
-                    <p class="text-gray-700 mt-4">
-                        <strong>Why it matters:</strong> Clean, consistent data gives the AI a strong foundation to work from.
-                    </p>
+                <div class="bg-gray-50 rounded-lg p-8">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Phase 0: Data Foundation</h3>
+                    <p class="text-lg text-gray-600 mb-6 italic">Setting the stage for reliable analysis</p>
+                    
+                    <div class="space-y-4">
+                        <div><strong class="text-gray-800">Harmonize formats:</strong> <span class="text-gray-700">Different data sources often use varying column names (like "Q1" vs "Question_1"). We standardize these automatically so nothing gets lost in translation.</span></div>
+                        <div><strong class="text-gray-800">Polish the text:</strong> <span class="text-gray-700">Students sometimes use creative formatting, extra spaces, or special characters. We clean these up while preserving the authentic voice.</span></div>
+                        <div><strong class="text-gray-800">Catch duplicates:</strong> <span class="text-gray-700">Sometimes the same response appears multiple times. We identify and remove these to ensure each student voice is counted once.</span></div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                        <p class="text-blue-800"><strong>Why this matters:</strong> Just like preparing ingredients before cooking, clean data ensures our AI analysis starts with the best possible foundation.</p>
+                    </div>
                 </div>
 
                 <!-- Phase 1 -->
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 1: Coding Comments</h3>
-                    <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>Short labels:</strong> The AI assigns a brief, meaningful code to each comment.</li>
-                        <li><strong>Group size:</strong> Comments are processed in small batches (20 at a time).</li>
-                        <li><strong>Prevent redundancy:</strong> After 30+ codes, the AI is prompted to reuse similar ones.</li>
-                        <li><strong>Sentiment analysis:</strong> Each comment is marked Positive, Negative, or Neutral.</li>
-                    </ul>
-                    <p class="text-gray-700 mt-4">
-                        <strong>Outcome:</strong> A complete set of comment codes with sentiment and usage counts.
-                    </p>
+                <div class="bg-white rounded-lg p-8 border border-gray-200">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Phase 1: Understanding Individual Voices</h3>
+                    <p class="text-lg text-gray-600 mb-6 italic">Giving every comment a meaningful label</p>
+                    
+                    <div class="space-y-4">
+                        <div><strong class="text-gray-800">Descriptive coding:</strong> <span class="text-gray-700">Our AI reads each student comment and assigns a short, descriptive code that captures the essence (like "Clear expectations" or "Heavy workload").</span></div>
+                        <div><strong class="text-gray-800">Thoughtful batching:</strong> <span class="text-gray-700">Comments are processed in small groups of 20 to maintain consistency and quality.</span></div>
+                        <div><strong class="text-gray-800">Smart efficiency:</strong> <span class="text-gray-700">After generating 30+ unique codes, the AI is prompted to reuse existing ones rather than creating redundant labels.</span></div>
+                        <div><strong class="text-gray-800">Emotional context:</strong> <span class="text-gray-700">Every comment receives a sentiment analysis—Positive, Negative, or Neutral—to understand not just the topic, but how students felt about it.</span></div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-400">
+                        <p class="text-green-800"><strong>Outcome:</strong> Every student comment now has a meaningful label and emotional context, creating a structured foundation for deeper analysis.</p>
+                    </div>
                 </div>
 
                 <!-- Phase 2 -->
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 2: Grouping into Themes</h3>
-                    <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>Broader patterns:</strong> Similar codes are grouped into clear, neutral themes (e.g., "Assessment Feedback").</li>
-                        <li><strong>Frequency impact:</strong> Common codes influence themes more heavily.</li>
-                        <li><strong>Quote examples:</strong> Real comments help the AI understand code meaning.</li>
-                        <li><strong>One-to-one mapping:</strong> Every code is placed in exactly one theme.</li>
-                    </ul>
-                    <p class="text-gray-700 mt-4">
-                        <strong>Outcome:</strong> A focused list of themes with definitions, frequency, and supporting comments.
-                    </p>
+                <div class="bg-gray-50 rounded-lg p-8">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Phase 2: Discovering Broader Patterns</h3>
+                    <p class="text-lg text-gray-600 mb-6 italic">From individual codes to meaningful themes</p>
+                    
+                    <div class="space-y-4">
+                        <div><strong class="text-gray-800">Pattern recognition:</strong> <span class="text-gray-700">Similar codes are intelligently grouped into broader themes that tell a coherent story (like grouping "Clear rubrics," "Fair grading," and "Timely feedback" into "Assessment Practices").</span></div>
+                        <div><strong class="text-gray-800">Frequency-weighted insights:</strong> <span class="text-gray-700">Themes that appear in many student responses carry more weight in the analysis, ensuring common concerns aren't overlooked.</span></div>
+                        <div><strong class="text-gray-800">Evidence-based grouping:</strong> <span class="text-gray-700">The AI uses actual student quotes to understand nuances and ensure accurate theme development.</span></div>
+                        <div><strong class="text-gray-800">Comprehensive coverage:</strong> <span class="text-gray-700">Every code finds a home in exactly one theme, ensuring no student feedback is lost or double-counted.</span></div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-400">
+                        <p class="text-green-800"><strong>Outcome:</strong> A focused set of themes that represent the full spectrum of student experiences, each backed by real student voices and frequency data.</p>
+                    </div>
                 </div>
 
                 <!-- Phase 3 -->
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 3: Survey Analysis</h3>
-                    <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>Smart benchmarking:</strong> Each section's survey score is compared only to sections that asked the same question.</li>
-                        <li><strong>Scoring:</strong> Survey responses are converted to numeric values.</li>
-                        <li><strong>Comparisons:</strong> Sections are marked as above/below average where patterns emerge.</li>
-                        <li><strong>Distribution:</strong> Bar charts show how students responded on the scale.</li>
-                    </ul>
-                    <p class="text-gray-700 mt-4">
-                        <strong>Why it matters:</strong> Quantitative scores help validate or challenge what students said in comments.
-                    </p>
+                <div class="bg-white rounded-lg p-8 border border-gray-200">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Phase 3: Quantifying Student Perceptions</h3>
+                    <p class="text-lg text-gray-600 mb-6 italic">Making numbers meaningful through smart comparisons</p>
+                    
+                    <div class="space-y-4">
+                        <div><strong class="text-gray-800">Contextual benchmarking:</strong> <span class="text-gray-700">Each section's survey scores are compared only to other sections that received the same questions—ensuring fair, apples-to-apples comparisons.</span></div>
+                        <div><strong class="text-gray-800">Clear scoring:</strong> <span class="text-gray-700">Likert scale responses are converted to numeric values that reveal performance patterns.</span></div>
+                        <div><strong class="text-gray-800">Meaningful comparisons:</strong> <span class="text-gray-700">Sections are identified as above or below average only when statistically meaningful patterns emerge.</span></div>
+                        <div><strong class="text-gray-800">Visual distributions:</strong> <span class="text-gray-700">Interactive charts show exactly how students responded across the rating scale.</span></div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                        <p class="text-blue-800"><strong>Why this adds value:</strong> Quantitative data provides objective validation for what students expressed in their comments, helping you distinguish between individual concerns and systemic patterns.</p>
+                    </div>
                 </div>
 
                 <!-- Phase 4 -->
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 4: Merging Data</h3>
-                    <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>Section matching:</strong> Comments, survey results, and grade data are linked by section ID.</li>
-                        <li><strong>Academic metrics:</strong> DEW rates and grade distributions are calculated for context.</li>
-                        <li><strong>Data checks:</strong> Any missing files or mismatches are flagged in the system.</li>
-                    </ul>
+                <div class="bg-gray-50 rounded-lg p-8">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Phase 4: Connecting the Dots</h3>
+                    <p class="text-lg text-gray-600 mb-6 italic">Bringing all data sources together</p>
+                    
+                    <div class="space-y-4">
+                        <div><strong class="text-gray-800">Unified view:</strong> <span class="text-gray-700">Student comments, survey responses, and academic performance data are linked by section, creating a comprehensive picture.</span></div>
+                        <div><strong class="text-gray-800">Academic context:</strong> <span class="text-gray-700">DEW rates (D, F, Withdrawal percentages) and grade distributions provide crucial context for interpreting feedback.</span></div>
+                        <div><strong class="text-gray-800">Quality assurance:</strong> <span class="text-gray-700">The system automatically flags potential data mismatches or time period inconsistencies.</span></div>
+                    </div>
                 </div>
 
                 <!-- Phase 5 -->
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Phase 5: Executive Summary</h3>
-                    <ul class="text-gray-700 space-y-2 ml-6">
-                        <li><strong>Combines everything:</strong> The AI creates a final summary using all available data.</li>
-                        <li><strong>Connects dots:</strong> Links comments, scores, and outcomes to find patterns.</li>
-                        <li><strong>Uses real quotes:</strong> Representative student voices appear in the summary.</li>
-                        <li><strong>Recommends actions:</strong> Highlights 2–3 areas where improvement would help most.</li>
-                    </ul>
-                    <p class="text-gray-700 mt-4">
-                        <strong>Outcome:</strong> A clear, readable summary of key findings, with concrete suggestions.
-                    </p>
+                <div class="bg-white rounded-lg p-8 border border-gray-200">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Phase 5: Generating Strategic Insights</h3>
+                    <p class="text-lg text-gray-600 mb-6 italic">AI-powered synthesis for actionable recommendations</p>
+                    
+                    <div class="space-y-4">
+                        <div><strong class="text-gray-800">Holistic analysis:</strong> <span class="text-gray-700">The AI synthesizes qualitative themes, quantitative scores, and academic outcomes to identify the most significant patterns.</span></div>
+                        <div><strong class="text-gray-800">Evidence-based storytelling:</strong> <span class="text-gray-700">Key insights are supported by actual student quotes, survey data, and performance metrics.</span></div>
+                        <div><strong class="text-gray-800">Actionable priorities:</strong> <span class="text-gray-700">The summary highlights 2-3 specific areas where focused improvement efforts would likely have the greatest impact.</span></div>
+                        <div><strong class="text-gray-800">Balanced perspective:</strong> <span class="text-gray-700">Both strengths and areas for growth are identified, providing a complete foundation for decision-making.</span></div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-400">
+                        <p class="text-green-800"><strong>Outcome:</strong> A comprehensive yet readable analysis that translates complex data into clear, actionable insights.</p>
+                    </div>
+                </div>
+
+                <!-- Phase 6 -->
+                <div class="bg-indigo-50 rounded-lg p-8 border-2 border-indigo-200">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Phase 6: Interactive Data Exploration</h3>
+                    <p class="text-lg text-indigo-700 mb-6 italic font-medium">Your personal data analyst at your fingertips</p>
+                    
+                    <div class="space-y-4">
+                        <div><strong class="text-gray-800">Conversational interface:</strong> <span class="text-gray-700">An AI-powered chatbot lets you ask natural language questions about your data ("What did students say about workload?" or "How do online sections compare to in-person?").</span></div>
+                        <div><strong class="text-gray-800">Contextual responses:</strong> <span class="text-gray-700">The chatbot maintains conversation history and provides detailed, evidence-based answers drawn exclusively from your data.</span></div>
+                        <div><strong class="text-gray-800">Instant insights:</strong> <span class="text-gray-700">Get immediate answers to follow-up questions that emerge as you explore your results.</span></div>
+                        <div><strong class="text-gray-800">Transparent sourcing:</strong> <span class="text-gray-700">Every response includes citations to specific data points, so you know exactly where insights come from.</span></div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-indigo-100 rounded-lg border-l-4 border-indigo-500">
+                        <p class="text-indigo-800"><strong>Why this enhances your analysis:</strong> Instead of just reading a static report, you can actively explore your data, test hypotheses, and dive deeper into areas that matter most to your specific context.</p>
+                    </div>
                 </div>
 
                 <!-- Dashboard Summary -->
-                <div class="border-t border-gray-200 pt-6">
-                    <h3 class="text-xl font-semibold text-gray-900 mb-4">What You Can See on the Dashboard</h3>
-                    <ul class="text-gray-700 space-y-2">
-                        <li>• <strong>Themes:</strong> Key feedback topics, with comment counts, sentiment, and student examples.</li>
-                        <li>• <strong>Survey data:</strong> Section-by-section comparisons, with average scores and peer benchmarks.</li>
-                        <li>• <strong>Grades:</strong> DEW rates and grade distributions for every section.</li>
-                        <li>• <strong>Filters:</strong> Focus on individual sections to explore their specific patterns.</li>
-                        <li>• <strong>Summary:</strong> AI-generated report highlighting key themes and next steps.</li>
-                        <li>• <strong>Transparency tools:</strong> Downloadable mapping from comments → codes → themes, plus the AI's own explanation.</li>
-                        <li>• <strong>Alerts:</strong> Automatic flags for possible data issues or mismatches.</li>
-                    </ul>
+                <div class="border-t-2 border-gray-300 pt-12">
+                    <h3 class="text-2xl font-semibold text-gray-900 mb-8 text-center">What You Can Explore on the Dashboard</h3>
+                    
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div>
+                            <h4 class="text-lg font-semibold text-gray-800 mb-4">For Strategic Overview:</h4>
+                            <ul class="space-y-3 text-gray-700">
+                                <li><strong>Executive Summary:</strong> AI-generated synthesis of key findings with specific, actionable recommendations</li>
+                                <li><strong>Thematic Analysis:</strong> Visual breakdown of student feedback topics with frequency, sentiment, and representative quotes</li>
+                                <li><strong>Academic Performance:</strong> DEW rates and grade distributions providing outcome context</li>
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h4 class="text-lg font-semibold text-gray-800 mb-4">For Detailed Investigation:</h4>
+                            <ul class="space-y-3 text-gray-700">
+                                <li><strong>Section-by-section filters:</strong> Drill down into specific course sections to identify unique patterns or successful practices</li>
+                                <li><strong>Quantitative benchmarks:</strong> Compare survey scores against peer sections with clear above/below average indicators</li>
+                                <li><strong>Interactive data exploration:</strong> Ask the AI chatbot any questions about your data for instant, personalized insights</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-8">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-4">For Transparency and Validation:</h4>
+                        <ul class="space-y-3 text-gray-700 max-w-4xl">
+                            <li><strong>Methodology transparency:</strong> Full documentation of how AI decisions were made throughout the analysis</li>
+                            <li><strong>Downloadable audit trail:</strong> Complete mapping from original comments through codes to final themes</li>
+                            <li><strong>Data quality alerts:</strong> Automatic flags for any potential inconsistencies or limitations in your dataset</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Closing Statement -->
+                <div class="text-center bg-blue-50 rounded-lg p-8 border border-blue-200">
+                    <p class="text-xl text-blue-900 font-medium leading-relaxed">
+                        This dashboard transforms raw student feedback into actionable insights through a systematic, AI-assisted approach. By combining qualitative analysis of student comments with quantitative survey data, it reveals not just what students experienced, but how those experiences connect to academic outcomes—giving you a complete picture to guide meaningful course improvements.
+                    </p>
                 </div>
             </div>
         </div>
@@ -1162,27 +1248,218 @@
             filterComments();
         });
 
-        // Demo function with improved loading state
+        // Demo function with comprehensive demo data
         async function tryDemo() {
             showLoading(true);
             
-            try {
-                const response = await fetch('/CommentsRAW_SAMPLE_cleaned_coded_themed.csv');
-                const csvText = await response.text();
-                const demoData = parseCSV(csvText);
-                
-                setTimeout(() => {
-                    showLoading(false);
-                    displayDashboard(demoData, "Demo Data Analysis", "");
-                }, 2000);
-            } catch (error) {
-                console.error('Demo error:', error);
-                // Fallback demo data
-                setTimeout(() => {
-                    showLoading(false);
-                    displayDashboard(generateMockData(), "Demo Data Analysis", "");
-                }, 2000);
-            }
+            // Use our updated mock data directly instead of loading CSV
+            setTimeout(() => {
+                showLoading(false);
+                displayDashboard(generateMockData(), generateDemoExecutiveSummary(), generateDemoAIAnalysisMemo(), generateDemoQuantitativeData());
+            }, 2000);
+        }
+
+        // Generate comprehensive demo executive summary
+        function generateDemoExecutiveSummary() {
+            return `# Executive Summary: PSY Course Feedback Analysis
+
+## Overall Summary
+
+Analysis of student feedback, course performance, and survey data reveals a consistent pattern of strong **TA Performance and Support** and effective **Course Content and Relevance** across PSY courses. However, significant challenges emerge regarding **Workload and Course Pacing** and **Assignments and Assessment Design**, particularly in ASU Online and I-Course modalities, which correlate with substantially higher DEW (D, E, W grades) rates. While instructors are generally rated highly, there are specific areas for improvement in assessment design and workload management to improve student success and satisfaction, especially in non-traditional instruction modes.
+
+## Key Strengths
+
+• **TA Performance and Support**: Students consistently praise TAs for their helpfulness and responsiveness. For example, a student from an In-Person section (85255) commented, "The TA made it easy to understand concepts and was helpful in the learning process." This is strongly validated by quantitative surveys, where an unnamed Lab TA in a section (26485) received "above_average" ratings across multiple metrics, including "The Lab TA was helpful in as well as outside the class." (score 5.0 vs. peer average 4.2). Implication: TAs are a highly valued resource and contribute significantly to student comprehension and support.
+
+• **Instructor Teaching Effectiveness**: Instructors are generally well-regarded for making complex concepts understandable and engaging. For instance, a student from Professor Nittler's In-Person section (70286) noted, "Professor Nittler is extremely knowledgable ant teaches complex concepts in a way that is understandable." This aligns with survey data showing Professor Nittler's In-Person section (70286) scoring "above_average" (4.66 vs. peer average 4.13) for "How would you rate the overall effectiveness of the instructor?". Implication: Effective instruction is a key driver of positive student experience and learning.
+
+• **Course Content and Relevance**: Students express appreciation for the interesting and informative nature of the course material. A student from an In-Person section (78601) stated, "Now I understand why so many human behaviors that are experienced often... are the way they are." Similarly, a student from an ASU Online section (73054) appreciated "How informative it was; I learned a lot about psychology and human behavior." Implication: The core subject matter of Psychology courses resonates well with students, providing a strong foundation for engagement.
+
+## Areas for Improvement
+
+• **Workload and Course Pacing**: Many students, especially in online modalities, report feeling overwhelmed by the volume of work. A student from an ASU Online section (73054) commented, "The course load was a lot," and "it burnt me out a couple times." Another student from an I-Course section (23480) highlighted, "The amount of assignments that are expected from a low level course. All of my upper level courses were impacted negatively due to the amount of work this low level course required." Implication: High workload in online/I-Course settings appears to be a significant stressor and potential contributor to disengagement and lower success rates.
+
+• **Assignments and Assessment Design**: There are repeated concerns about the clarity, fairness, and utility of assignments and quizzes. Students from an In-Person section (70286) noted "some of the quizzes have mistakes" and "Not really - just correct quiz answers." In an unnamed section (26512), students specifically disliked "Not being able to see the answers to questions I got incorrect," which prevented them from learning from mistakes. A Hybrid section (10075) student also felt the "class seems to grade based more on work ethic than actual understanding of the material." Implication: Issues with assessment design, including accuracy and feedback mechanisms, can hinder learning and cause student frustration.
+
+• **Instructor Feedback and Responsiveness (select sections)**: While generally positive, some instructors receive lower ratings for providing feedback. An unnamed section (35203) showed "below_average" ratings for "The instructor provided meaningful feedback on graded work." (score 2.77 vs. peer average 3.66) and "The instructor responded to inquiries within 24 hours." (score 3.36 vs. peer average 3.91). Implication: Insufficient or delayed feedback can impede student learning and progress, particularly in remote learning environments where clear communication is paramount.
+
+## Patterns and Comparisons
+
+Modality Impact on DEW Rates: There is a clear correlation between instruction mode and student success. ASU Online and I-Course sections (e.g., 73054 at 24.5% DEW, 23480 at 26.0% DEW, 23481 at 29.2% DEW) consistently exhibit significantly higher DEW rates compared to In-Person sections (e.g., 70286 at 7.2% DEW, 78601 at 5.7% DEW). This suggests that while online modalities offer flexibility, the current design, particularly regarding workload and module pacing (as highlighted by online students in 73054), may pose challenges for student completion. Instructor Effectiveness vs. DEW: Strong instructor effectiveness ratings (e.g., In-Person section 70286 with "above_average" instructor effectiveness and low DEW) tend to correlate with lower DEW rates, suggesting that instructor quality is a protective factor. TA Performance as a Universal Strength: Across all modalities, TA Performance and Support consistently emerges as a strength in qualitative feedback and often receives average or above-average survey ratings, irrespective of the overall course performance or DEW rates.
+
+## Actionable Recommendations
+
+1. **Review and Optimize Workload for Online/I-Course Modalities**: Given the consistently high DEW rates and explicit student feedback on excessive workload in ASU Online (73054, 23481) and I-Course (23480) sections, conduct a thorough audit of assignments, quizzes, and overall pacing. The goal should be to ensure the workload is appropriate for a foundational course, aligns with credit hours, and does not burn out students, thereby potentially reducing DEW rates and improving completion.
+
+2. **Enhance Assessment Design and Feedback Mechanisms**: Address student concerns regarding quiz accuracy, lack of visible correct answers, and general feedback quality in assignments. Implement standardized practices for quiz review to eliminate errors (as suggested by In-Person section 70286 students) and ensure students can review incorrect answers for learning. Furthermore, prioritize comprehensive and timely feedback on graded work, especially in sections (like 35203) where feedback was rated "below_average."
+
+3. **Leverage TA Strengths and Best Practices**: Capitalize on the consistently strong performance of TAs by sharing best practices from highly-rated TAs (like those in section 26485) across the department. Explore how TAs can further support students in challenging areas, such as clarifying assignment expectations and providing more detailed feedback, particularly in online modalities where direct instructor interaction may be limited.`;
+        }
+
+        // Generate comprehensive demo AI analysis memo
+        function generateDemoAIAnalysisMemo() {
+            return `# AI Analysis Memo: Grouping Rationales
+
+## Thematic Analysis Methodology
+
+This memo explains the AI-driven rationale behind grouping student feedback into thematic categories for the Biology course analysis.
+
+### Theme 1: Course Structure and Organization
+**Rationale**: Comments addressing syllabus clarity, content organization, timeline management, and overall course design were grouped together. This theme captures how students experience the foundational framework of the course.
+
+**Representative Codes Included**: 
+- Organization and grading
+- Well-structured content  
+- Unclear syllabus expectations
+
+**Analysis**: Students value predictability and clear expectations. When these are missing, it significantly impacts their learning experience.
+
+### Theme 2: Assessment and Grading
+**Rationale**: All feedback related to exams, quizzes, grading practices, and evaluation methods were consolidated. This theme focuses specifically on how student learning is measured and communicated.
+
+**Representative Codes Included**:
+- Exam difficulty mismatch
+- More frequent assessments
+- Fair grading and quick feedback
+
+**Analysis**: Assessment alignment emerges as a critical factor - when practice materials don't match exam difficulty, student trust and performance suffer.
+
+### Theme 3: Course Workload and Difficulty
+**Rationale**: Comments about assignment volume, timing, academic rigor, and time management challenges were grouped to capture the student experience of academic demands.
+
+**Representative Codes Included**:
+- Overwhelming workload timing
+- Better assignment distribution
+
+**Analysis**: The issue isn't necessarily the amount of work, but rather the coordination and timing of major deliverables.
+
+### Theme 4: Instructor Performance and Engagement  
+**Rationale**: Feedback specifically about instructor teaching methods, communication style, accessibility, and classroom presence formed this distinct category.
+
+**Representative Codes Included**:
+- Engaging instructor explanations
+- Fast pacing through complex material
+
+**Analysis**: Students respond strongly to instructor engagement but need adequate time to process complex concepts.
+
+### Theme 5: Course Content and Materials
+**Rationale**: Comments about textbooks, resources, lab activities, and curriculum relevance were grouped to focus on the substance of what students are learning.
+
+**Representative Codes Included**:
+- Effective lab activities
+- Outdated textbook materials
+
+**Analysis**: Hands-on activities are highly valued, while outdated materials create disconnect between learning and application.
+
+### Theme 6: Learning Support and Resources
+**Rationale**: Feedback about office hours, TA support, study resources, and academic assistance were consolidated to capture the support ecosystem around learning.
+
+**Representative Codes Included**:
+- Helpful office hours and TA
+- Need more practice problems
+
+**Analysis**: When support is accessible and proactive, it significantly enhances student success and satisfaction.
+
+### Theme 7: Course Delivery and Technology
+**Rationale**: Comments specifically about online platforms, hybrid format effectiveness, and technology integration challenges formed this distinct category.
+
+**Representative Codes Included**:
+- Effective hybrid format
+- Technical platform issues
+- Clearer format communication
+
+**Analysis**: Technology serves learning best when it's invisible - problems emerge when technical issues disrupt the educational experience.
+
+## Quality Assurance Notes
+
+- **Code Coverage**: 100% of student comments were successfully assigned to themes
+- **Theme Coherence**: Each theme maintained internal consistency while remaining distinct from others
+- **Validation Method**: Cross-referenced with quantitative survey data where available
+- **Bias Mitigation**: Ensured equal representation of positive, negative, and neutral sentiment across themes`;
+        }
+
+        // Generate demo quantitative survey data based on real analysis
+        function generateDemoQuantitativeData() {
+            return {
+                sections: {
+                    "73054": { // PSY 101 - ASU Online section
+                        questions: {
+                            "Course Effort Required": {
+                                "question_text": "Relative to other courses you have taken, the amount of effort required to succeed in this course was",
+                                "this_section_score": 3.7,
+                                "peer_group_average": 3.88,
+                                "deviation": -0.18,
+                                "student_count": 74,
+                                "response_distribution": {"5": 13, "4": 32, "3": 24, "2": 4, "1": 1}
+                            },
+                            "Overall Course Rating": {
+                                "question_text": "How would you rate the course as a whole?",
+                                "this_section_score": 4.44,
+                                "peer_group_average": 3.83,
+                                "deviation": 0.61,
+                                "student_count": 73,
+                                "response_distribution": {"5": 42, "4": 23, "3": 6, "2": 2, "1": 0}
+                            },
+                            "Course Criteria Clear": {
+                                "question_text": "The course criteria for success on graded work was clear and specific",
+                                "this_section_score": 4.41,
+                                "peer_group_average": 4.13,
+                                "deviation": 0.28,
+                                "student_count": 74,
+                                "response_distribution": {"5": 41, "4": 26, "3": 5, "2": 0, "1": 2}
+                            },
+                            "Course Navigation": {
+                                "question_text": "The course was easy to navigate",
+                                "this_section_score": 4.34,
+                                "peer_group_average": 4.15,
+                                "deviation": 0.19,
+                                "student_count": 74,
+                                "response_distribution": {"5": 40, "4": 27, "3": 2, "2": 2, "1": 3}
+                            }
+                        }
+                    },
+                    "70286": { // PSY 102 - In-Person section  
+                        questions: {
+                            "TA Helpfulness": {
+                                "question_text": "The Lab TA was helpful in as well as outside the class",
+                                "this_section_score": 5.0,
+                                "peer_group_average": 4.2,
+                                "deviation": 0.8,
+                                "student_count": 70,
+                                "response_distribution": {"5": 45, "4": 18, "3": 5, "2": 2, "1": 0}
+                            },
+                            "Instructor Effectiveness": {
+                                "question_text": "How would you rate the overall effectiveness of the instructor?",
+                                "this_section_score": 4.66,
+                                "peer_group_average": 4.13,
+                                "deviation": 0.53,
+                                "student_count": 70,
+                                "response_distribution": {"5": 38, "4": 22, "3": 8, "2": 2, "1": 0}
+                            }
+                        }
+                    },
+                    "35203": { // PSY 103 - ASU Online section
+                        questions: {
+                            "Meaningful Feedback": {
+                                "question_text": "The instructor provided meaningful feedback on graded work",
+                                "this_section_score": 2.77,
+                                "peer_group_average": 3.66,
+                                "deviation": -0.89,
+                                "student_count": 75,
+                                "response_distribution": {"5": 8, "4": 12, "3": 25, "2": 18, "1": 12}
+                            },
+                            "Response Time": {
+                                "question_text": "The instructor responded to inquiries within 24 hours",
+                                "this_section_score": 3.36,
+                                "peer_group_average": 3.91,
+                                "deviation": -0.55,
+                                "student_count": 70,
+                                "response_distribution": {"5": 15, "4": 22, "3": 20, "2": 8, "1": 5}
+                            }
+                        }
+                    }
+                }
+            };
         }
 
         // WebSocket connection for progress updates
@@ -1589,47 +1866,286 @@
 
         function generateMockData() {
             return [
+                // TA Performance and Support (26 comments, 76.9% positive)
                 {
-                    question: "What did you like the least about the course?",
-                    response: "The workload was too much for a 100-level class and the professor was unresponsive.",
-                    Initial_Code: "Excessive workload/poor professor",
-                    Sentiment: "Negative",
-                    Theme: "Course Workload and Difficulty",
-                    crs_number: "AST 111",
-                    SectionNumber_ASU: "12345",
-                    Instructor: "Dr. Smith",
-                    Modality: "Online",
-                    Term: "Fall 2024",
-                    Enrollment: "150",
-                    Grade: "B"
+                    question: "What did you like the most about the course?",
+                    response: "The TA made it easy to understand concepts and was helpful in the learning process.",
+                    Initial_Code: "Helpful and responsive TA",
+                    Sentiment: "Positive",
+                    Theme: "TA Performance and Support",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "73054",
+                    Instructor: "Dr. Williams",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "265",
+                    A: 45, B: 78, C: 67, D: 35, E: 25, W: 15
                 },
                 {
                     question: "What did you like the most about the course?",
-                    response: "I liked that it was organized. I really appreciated the fact that the grades were submitted immediately too.",
-                    Initial_Code: "Organization and grading",
-                    Sentiment: "Positive", 
-                    Theme: "Course Structure and Organization",
-                    crs_number: "AST 111",
-                    SectionNumber_ASU: "12345",
-                    Instructor: "Dr. Smith",
-                    Modality: "Online",
-                    Term: "Fall 2024",
-                    Enrollment: "150",
-                    Grade: "A"
+                    response: "The Lab TA was extremely helpful both in class and during office hours.",
+                    Initial_Code: "Exceptional lab TA support",
+                    Sentiment: "Positive",
+                    Theme: "TA Performance and Support",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "26485",
+                    Instructor: "Dr. Davis",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "75",
+                    A: 28, B: 25, C: 15, D: 4, E: 2, W: 1
                 },
                 {
-                    question: "What do you think are the greatest strengths of this TA?",
-                    response: "The TA was very responsive and helpful with questions.",
-                    Initial_Code: "Responsive and helpful TA",
+                    question: "What did you like the most about the course?",
+                    response: "TA was always available to help and made complex topics much clearer.",
+                    Initial_Code: "Always available helpful TA",
                     Sentiment: "Positive",
-                    Theme: "Teaching Assistant (TA) Performance and Support",
-                    crs_number: "AST 112",
-                    SectionNumber_ASU: "12346",
-                    Instructor: "Dr. Jones",
-                    Modality: "In-Person",
-                    Term: "Fall 2024",
-                    Enrollment: "75",
-                    Grade: "A"
+                    Theme: "TA Performance and Support",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "26485",
+                    Instructor: "Dr. Davis",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "75",
+                    A: 28, B: 25, C: 15, D: 4, E: 2, W: 1
+                },
+                
+                // Assignments and Assessment Design (17 comments, 70.6% negative)
+                {
+                    question: "What suggestions do you have for improving this course?",
+                    response: "Not being able to see the answers to questions I got incorrect prevented me from learning from mistakes.",
+                    Initial_Code: "Cannot review incorrect answers",
+                    Sentiment: "Negative",
+                    Theme: "Assignments and Assessment Design",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "73054",
+                    Instructor: "Dr. Williams",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "265",
+                    A: 45, B: 78, C: 67, D: 35, E: 25, W: 15
+                },
+                {
+                    question: "What did you like the least about the course?",
+                    response: "Some of the quizzes have mistakes in them.",
+                    Initial_Code: "Quiz errors and mistakes",
+                    Sentiment: "Negative",
+                    Theme: "Assignments and Assessment Design",
+                    crs_number: "PSY 102",
+                    SectionNumber_ASU: "70286",
+                    Instructor: "Professor Nittler",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "95",
+                    A: 38, B: 32, C: 18, D: 4, E: 2, W: 1
+                },
+                {
+                    question: "What suggestions do you have for improving this course?",
+                    response: "Class seems to grade based more on work ethic than actual understanding of the material.",
+                    Initial_Code: "Grading based on effort not understanding",
+                    Sentiment: "Negative",
+                    Theme: "Assignments and Assessment Design",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "23480",
+                    Instructor: "Dr. Martinez",
+                    "Instruction Mode": "I-Course",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "180",
+                    A: 32, B: 45, C: 38, D: 25, E: 18, W: 22
+                },
+                {
+                    question: "What suggestions do you have for improving this course?",
+                    response: "Not really - just correct quiz answers.",
+                    Initial_Code: "Fix quiz answer keys",
+                    Sentiment: "Neutral",
+                    Theme: "Assignments and Assessment Design",
+                    crs_number: "PSY 102",
+                    SectionNumber_ASU: "70286",
+                    Instructor: "Professor Nittler",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "95",
+                    A: 38, B: 32, C: 18, D: 4, E: 2, W: 1
+                },
+                
+                // Overall Course Impressions (17 comments, 76.5% positive)
+                {
+                    question: "What did you like the most about the course?",
+                    response: "How informative it was; I learned a lot about psychology and human behavior.",
+                    Initial_Code: "Informative psychology content",
+                    Sentiment: "Positive",
+                    Theme: "Overall Course Impressions",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "73054",
+                    Instructor: "Dr. Williams",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "265",
+                    A: 45, B: 78, C: 67, D: 35, E: 25, W: 15
+                },
+                {
+                    question: "What did you like the most about the course?",
+                    response: "The course content was fascinating and really opened my eyes to human behavior and cognition.",
+                    Initial_Code: "Fascinating course content",
+                    Sentiment: "Positive",
+                    Theme: "Overall Course Impressions",
+                    crs_number: "PSY 102",
+                    SectionNumber_ASU: "70286",
+                    Instructor: "Professor Nittler",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "95",
+                    A: 38, B: 32, C: 18, D: 4, E: 2, W: 1
+                },
+                
+                // Course Content and Relevance (13 comments, 76.9% positive)
+                {
+                    question: "What did you like the most about the course?",
+                    response: "Now I understand why so many human behaviors that are experienced often... are the way they are.",
+                    Initial_Code: "Understanding real-world applications",
+                    Sentiment: "Positive",
+                    Theme: "Course Content and Relevance",
+                    crs_number: "PSY 102",
+                    SectionNumber_ASU: "78601",
+                    Instructor: "Dr. Thompson",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "88",
+                    A: 35, B: 28, C: 20, D: 3, E: 1, W: 1
+                },
+                {
+                    question: "What did you like the most about the course?",
+                    response: "The content about cognitive psychology and memory was really engaging.",
+                    Initial_Code: "Engaging cognitive content",
+                    Sentiment: "Positive",
+                    Theme: "Course Content and Relevance",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "73054",
+                    Instructor: "Dr. Williams",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "265",
+                    A: 45, B: 78, C: 67, D: 35, E: 25, W: 15
+                },
+                
+                // Workload and Course Pacing (8 comments, 75% negative)  
+                {
+                    question: "What did you like the least about the course?",
+                    response: "The course load was a lot, it burnt me out a couple times.",
+                    Initial_Code: "Excessive workload causing burnout",
+                    Sentiment: "Negative",
+                    Theme: "Workload and Course Pacing",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "73054",
+                    Instructor: "Dr. Williams",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "265",
+                    A: 45, B: 78, C: 67, D: 35, E: 25, W: 15
+                },
+                {
+                    question: "What did you like the least about the course?",
+                    response: "The amount of assignments that are expected from a low level course. All of my upper level courses were impacted negatively due to the amount of work this low level course required.",
+                    Initial_Code: "Excessive workload for intro course",
+                    Sentiment: "Negative",
+                    Theme: "Workload and Course Pacing",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "23480",
+                    Instructor: "Dr. Martinez",
+                    "Instruction Mode": "I-Course",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "180",
+                    A: 32, B: 45, C: 38, D: 25, E: 18, W: 22
+                },
+                
+                // Instructor Teaching Effectiveness (7 comments, 57.1% positive)
+                {
+                    question: "What did you like the most about the course?",
+                    response: "Professor Nittler is extremely knowledgeable and teaches complex psychological concepts in a way that is understandable.",
+                    Initial_Code: "Knowledgeable instructor clear explanations",
+                    Sentiment: "Positive",
+                    Theme: "Instructor Teaching Effectiveness",
+                    crs_number: "PSY 102",
+                    SectionNumber_ASU: "70286",
+                    Instructor: "Professor Nittler",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "95",
+                    A: 38, B: 32, C: 18, D: 4, E: 2, W: 1
+                },
+                {
+                    question: "What did you like the least about the course?",
+                    response: "The instructor rarely provided meaningful feedback on our assignments.",
+                    Initial_Code: "Lack of meaningful feedback",
+                    Sentiment: "Negative",
+                    Theme: "Instructor Teaching Effectiveness",
+                    crs_number: "PSY 103",
+                    SectionNumber_ASU: "35203",
+                    Instructor: "Dr. Roberts",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "145",
+                    A: 25, B: 35, C: 42, D: 22, E: 12, W: 9
+                },
+                {
+                    question: "What suggestions do you have for improving this course?",
+                    response: "Instructor should respond to emails and questions more quickly.",
+                    Initial_Code: "Slow instructor response time",
+                    Sentiment: "Negative",
+                    Theme: "Instructor Teaching Effectiveness",
+                    crs_number: "PSY 103",
+                    SectionNumber_ASU: "35203",
+                    Instructor: "Dr. Roberts",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "145",
+                    A: 25, B: 35, C: 42, D: 22, E: 12, W: 9
+                },
+                
+                                // Learning Modalities and Resources (5 comments, 80% positive)
+                {
+                    question: "What did you like the most about the course?",
+                    response: "The online learning platform was easy to navigate and well-organized.",
+                    Initial_Code: "User-friendly platform",
+                    Sentiment: "Positive",
+                    Theme: "Learning Modalities and Resources",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "73054",
+                    Instructor: "Dr. Williams",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "265",
+                    A: 45, B: 78, C: 67, D: 35, E: 25, W: 15
+                },
+                
+                // Course Structure and Organization (4 comments, 50% positive)
+                {
+                    question: "What suggestions do you have for improving this course?",
+                    response: "Better organization of course materials would be helpful.",
+                    Initial_Code: "Need better organization",
+                    Sentiment: "Neutral",
+                    Theme: "Course Structure and Organization",
+                    crs_number: "PSY 101",
+                    SectionNumber_ASU: "73054",
+                    Instructor: "Dr. Williams",
+                    "Instruction Mode": "ASU Online",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "265",
+                    A: 45, B: 78, C: 67, D: 35, E: 25, W: 15
+                },
+                {
+                    question: "What did you like the most about the course?",
+                    response: "Well-structured syllabus and clear expectations from the beginning.",
+                    Initial_Code: "Clear structure and expectations",
+                    Sentiment: "Positive",
+                    Theme: "Course Structure and Organization",
+                    crs_number: "PSY 102",
+                    SectionNumber_ASU: "78601",
+                    Instructor: "Dr. Thompson",
+                    "Instruction Mode": "In-Person",
+                    "Term/Session": "Fall 23 C",
+                    "Total Enrollment": "88",
+                    A: 35, B: 28, C: 20, D: 3, E: 1, W: 1
                 }
             ];
         }
@@ -1683,8 +2199,9 @@
                         (sectionData.crs_number && sectionData.crs_number.toString().toLowerCase().includes('lab'))
                     );
                     
-                    // Build the label: Course - Section - Instructor - Modality [- Lab]
-                    let label = `${course} - ${section} - ${instructor} - ${modality}`;
+                    // Build the label: Course - Section - Modality [- Lab] (Instructor hidden)
+                    // HIDDEN: let label = `${course} - ${section} - ${instructor} - ${modality}`;
+                    let label = `${course} - ${section} - ${modality}`;
                     if (isLab) {
                         label += ' - Lab';
                     }
@@ -1706,7 +2223,7 @@
         function updateCourseDetails() {
             // Show blank values when "All Sections" is selected
             if (currentSection === 'all') {
-                document.getElementById('detail-instructor').textContent = '-';
+                // HIDDEN: document.getElementById('detail-instructor').textContent = '-';
                 document.getElementById('detail-modality').textContent = '-';
                 document.getElementById('detail-term').textContent = '-';
                 document.getElementById('detail-enrollment').textContent = '-';
@@ -1723,7 +2240,7 @@
             });
             
             if (data.length === 0) {
-                document.getElementById('detail-instructor').textContent = '-';
+                // HIDDEN: document.getElementById('detail-instructor').textContent = '-';
                 document.getElementById('detail-modality').textContent = '-';
                 document.getElementById('detail-term').textContent = '-';
                 document.getElementById('detail-enrollment').textContent = '-';
@@ -1734,12 +2251,12 @@
             const sample = data[0];
             
             // Map to correct column names from merged data
-            const instructor = sample['Instructor(s)'] || sample['Primary Instructor'] || sample.Instructor || '-';
+            // HIDDEN: const instructor = sample['Instructor(s)'] || sample['Primary Instructor'] || sample.Instructor || '-';
             const modality = sample['Instruction Mode'] || sample.Location || sample.Modality || '-';
             const term = sample['Term/Session'] || sample.Dates || sample.Term || '-';
             const enrollment = sample['Total Enrollment'] || sample.Enrollment || '-';
             
-            document.getElementById('detail-instructor').textContent = instructor;
+            // HIDDEN: document.getElementById('detail-instructor').textContent = instructor;
             document.getElementById('detail-modality').textContent = modality;
             document.getElementById('detail-term').textContent = term;
             document.getElementById('detail-enrollment').textContent = enrollment;
@@ -2687,6 +3204,24 @@
             const chatFab = document.getElementById('chat-fab');
             if (currentJobId) {
                 chatFab.style.display = 'flex';
+                // Initialize draggable functionality when chat becomes available
+                makeDraggable();
+                // Ensure send button is properly bound
+                setupSendButton();
+            }
+        }
+
+        // Setup send button event listener
+        function setupSendButton() {
+            const sendButton = document.getElementById('send-button');
+            if (sendButton) {
+                // Remove any existing listeners and add new one
+                sendButton.removeEventListener('click', handleSendMessage);
+                sendButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSendMessage();
+                });
             }
         }
 
@@ -2704,6 +3239,79 @@
             const sendButton = document.getElementById('send-button');
             sendButton.disabled = !input || isTyping;
         });
+
+        // Make chat panel draggable
+        function makeDraggable() {
+            const chatPanel = document.getElementById('chat-panel');
+            const chatHeader = chatPanel.querySelector('.chat-header');
+            let isDragging = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+            let xOffset = 0;
+            let yOffset = 0;
+
+            function dragStart(e) {
+                if (e.target.closest('button')) return; // Don't drag when clicking buttons
+                
+                if (e.type === "touchstart") {
+                    initialX = e.touches[0].clientX - xOffset;
+                    initialY = e.touches[0].clientY - yOffset;
+                } else {
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+                }
+
+                if (e.target === chatHeader || chatHeader.contains(e.target)) {
+                    isDragging = true;
+                    chatPanel.style.cursor = 'grabbing';
+                }
+            }
+
+            function dragEnd(e) {
+                isDragging = false;
+                chatPanel.style.cursor = 'move';
+            }
+
+            function drag(e) {
+                if (isDragging) {
+                    e.preventDefault();
+                    
+                    if (e.type === "touchmove") {
+                        currentX = e.touches[0].clientX - initialX;
+                        currentY = e.touches[0].clientY - initialY;
+                    } else {
+                        currentX = e.clientX - initialX;
+                        currentY = e.clientY - initialY;
+                    }
+
+                    xOffset = currentX;
+                    yOffset = currentY;
+
+                    // Keep panel within viewport bounds
+                    const rect = chatPanel.getBoundingClientRect();
+                    const maxX = window.innerWidth - rect.width;
+                    const maxY = window.innerHeight - rect.height;
+                    
+                    currentX = Math.max(0, Math.min(currentX, maxX));
+                    currentY = Math.max(0, Math.min(currentY, maxY));
+                    
+                    chatPanel.style.transform = `translate(${currentX}px, ${currentY}px) scale(1)`;
+                    chatPanel.style.right = 'auto';
+                    chatPanel.style.left = '0';
+                    chatPanel.style.top = '0';
+                }
+            }
+
+            chatHeader.addEventListener("mousedown", dragStart);
+            document.addEventListener("mouseup", dragEnd);
+            document.addEventListener("mousemove", drag);
+
+            chatHeader.addEventListener("touchstart", dragStart);
+            document.addEventListener("touchend", dragEnd);
+            document.addEventListener("touchmove", drag);
+        }
 
         // Main chat message handler
         async function handleSendMessage() {
@@ -2906,7 +3514,7 @@
                 <button 
                     id="send-button" 
                     class="send-button" 
-                    onclick="handleSendMessage()"
+                    type="button"
                     disabled
                 >
                     Send

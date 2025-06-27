@@ -448,7 +448,7 @@ Guidelines & Instructions:
 
 3. **Theme Naming:**
    - Theme names must be short, neutral noun phrases (2–4 words max).
-   - Do not use evaluative language (e.g., avoid "Excellent," "Frustrating," "Poor").
+   - Do not use evaluative language (e.g., avoid "Excellent," "Frustrating," "Poor," "Negative," "Positive").
    - Good examples: "Instructor Communication," "Assessment Clarity," "Course Resources."
 
 4. **Show Your Work:** For each theme, provide the exact list of supporting_codes that you grouped into it. Each code must appear in only one theme.
@@ -1264,9 +1264,9 @@ def generate_enhanced_markdown_report(themes_data: Dict[str, Any],
 
 def analyze_themes(coded_df: pd.DataFrame, input_file_path: str = None, job_id: str = None) -> tuple[pd.DataFrame, str, dict]:
     """
-    Perform thematic analysis on coded qualitative data using enhanced methodology.
-    Phase 2: Methodologically-Aligned Thematic Analysis Agent with salience weighting,
-    context samples, verification loops, and reflexive memos.
+    Perform thematic analysis on coded qualitative data using two-pass methodology.
+    Phase 2: Two-Pass Thematic Analysis Agent with salience weighting, context samples,
+    theme generation pass, and comprehensive code assignment pass.
     
     Args:
         coded_df (pd.DataFrame): DataFrame with coded data
@@ -1276,7 +1276,7 @@ def analyze_themes(coded_df: pd.DataFrame, input_file_path: str = None, job_id: 
     Returns:
         tuple[pd.DataFrame, str, dict]: (themed_dataframe, markdown_report, themes_data)
     """
-    print("=== Thematic Analysis Agent - Phase 2 (Methodologically-Aligned) ===\n")
+    print("=== Thematic Analysis Agent - Phase 2 (Two-Pass Strategy) ===\n")
     
     # Load configuration
     if not load_config():
@@ -1319,12 +1319,12 @@ def analyze_themes(coded_df: pd.DataFrame, input_file_path: str = None, job_id: 
     # Create set of valid codes for verification
     valid_codes = set(code_frequencies.keys())
     
-    # F3: Generate themes with verification and retry logic
-    print(f"🎯 Starting enhanced thematic synthesis (target: {theme_target} themes)...")
-    themes_data = generate_themes_enhanced(df, enriched_codes, theme_target, valid_codes)
+    # F3: Generate themes using two-pass strategy
+    print(f"🎯 Starting two-pass thematic synthesis (target: {theme_target} themes)...")
+    themes_data = generate_themes_two_pass(df, enriched_codes, theme_target, valid_codes)
     
     if themes_data is None:
-        print("Failed to generate themes with enhanced methodology")
+        print("Failed to generate themes with two-pass methodology")
         df['Theme'] = 'Theme generation failed'
         report = "# Thematic Analysis Report\n\nTheme generation failed."
         return df, report, {}
@@ -1339,7 +1339,7 @@ def analyze_themes(coded_df: pd.DataFrame, input_file_path: str = None, job_id: 
     ai_analysis_memo = generate_ai_analysis_memo(themes_data, job_id)
     themes_data['ai_analysis_memo'] = ai_analysis_memo
     
-    print(f"=== Methodologically-Aligned Thematic Analysis Complete ===")
+    print(f"=== Two-Pass Thematic Analysis Complete ===")
     print(f"Total rows processed: {len(themed_df)}")
     print(f"Unique codes analyzed: {num_unique_codes}")
     print(f"Target themes: {theme_target}")
@@ -1417,7 +1417,7 @@ def main():
     """
     Main function to orchestrate the thematic analysis process.
     """
-    print("=== Thematic Analysis Agent - Phase 2 ===\n")
+    print("=== Thematic Analysis Agent - Phase 2 (Two-Pass Strategy) ===\n")
     
     # Load configuration
     if not load_config():
@@ -1438,4 +1438,274 @@ def main():
         print(f"Error: {e}")
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+# Add two-pass strategy functions after the existing functions
+
+def create_theme_generation_prompt(enriched_codes: List[Dict[str, Any]], theme_target: int) -> str:
+    """
+    Create the first pass prompt for theme generation only.
+    
+    Args:
+        enriched_codes (List[Dict[str, Any]]): Enriched codes with frequencies and samples
+        theme_target (int): Target number of themes
+        
+    Returns:
+        str: Theme generation prompt
+    """
+    prompt = f"""Role: You are a senior qualitative researcher. Your task is to analyze a list of open codes from student feedback and define a set of high-level themes.
+
+Input: You will be provided with a list of unique open codes, their frequency counts, and representative excerpts.
+
+Objective: Review all the codes and identify the primary conceptual pillars in the data. Based on your analysis, define approximately **{theme_target}** distinct themes. Do NOT assign codes to themes in this step. Your only goal is to define the "buckets."
+
+Instructions:
+1. **Analyze Holistically:** Review the entire list of codes, counts, and excerpts.
+2. **Define Themes:** For each conceptual pillar you identify, provide a `theme_name` and a `theme_description`.
+3. **Theme Naming:** Theme names must be short, neutral noun phrases (e.g., "Instructor Communication," "Assessment Clarity").
+4. **Provide a Memo:** After defining the themes, write a short Analyst Memo explaining your overall strategy for defining these themes.
+
+Required Output Format:
+Your entire response MUST be a single, valid JSON object.
+
+{{
+  "themes": [
+    {{
+      "theme_name": "Short Descriptive Name",
+      "theme_description": "One sentence summarizing what this theme captures."
+    }}
+  ],
+  "memo": "Short explanation of your high-level grouping logic (max ~100 words)."
+}}
+
+Data for Analysis:
+Here is the list of initial codes, their counts, and representative excerpts. Please define approximately {theme_target} themes based on this data.
+
+"""
+    
+    # Add enriched codes data
+    for code_info in enriched_codes:
+        code = code_info['code']
+        count = code_info['count']
+        samples = code_info['samples']
+        
+        prompt += f"\n**Code:** {code} (frequency: {count})\n"
+        
+        # Add sample excerpts
+        if samples:
+            prompt += "Sample excerpts:\n"
+            for sample in samples[:2]:  # Show first 2 samples
+                question = sample.get('question', 'N/A')
+                response = sample.get('response', 'N/A')
+                prompt += f"- Q: {question[:100]}... A: {response[:100]}...\n"
+        prompt += "\n"
+    
+    return prompt
+
+
+def create_code_assignment_prompt(predefined_themes: List[Dict[str, Any]], codes_to_assign: List[str]) -> str:
+    """
+    Create the second pass prompt for code assignment to predefined themes.
+    
+    Args:
+        predefined_themes (List[Dict[str, Any]]): Themes from first pass
+        codes_to_assign (List[str]): Codes to assign to themes
+        
+    Returns:
+        str: Code assignment prompt
+    """
+    prompt = """Role: You are a meticulous research assistant. Your task is to classify a list of open codes into a predefined set of themes.
+
+Input:
+1. **Predefined Themes:** A list of themes with their names and descriptions.
+2. **Codes to Assign:** A batch of unique open codes from student feedback.
+
+Objective: For each code in the "Codes to Assign" list, assign it to the single most appropriate theme from the "Predefined Themes" list.
+
+Instructions:
+- Review the `theme_name` and `theme_description` for each theme to understand its scope.
+- For each code, find the theme that best captures its meaning.
+- Every code MUST be assigned to exactly one theme.
+
+Required Output Format:
+Your entire response MUST be a single, valid JSON array of objects.
+
+[
+  {
+    "code": "The exact code string from the input",
+    "assigned_theme": "The exact theme_name from the Predefined Themes list"
+  }
+]
+
+---
+### Data for Analysis
+
+**1. Predefined Themes:**
+"""
+    
+    # Add predefined themes
+    for theme in predefined_themes:
+        theme_name = theme.get('theme_name', '')
+        theme_description = theme.get('theme_description', '')
+        prompt += f"\n- **{theme_name}:** {theme_description}"
+    
+    prompt += "\n\n**2. Codes to Assign:**\n"
+    
+    # Add codes to assign
+    for code in codes_to_assign:
+        prompt += f"- {code}\n"
+    
+    return prompt
+
+
+def generate_themes_two_pass(df: pd.DataFrame, enriched_codes: List[Dict[str, Any]], 
+                           theme_target: int, valid_codes: set) -> Optional[Dict[str, Any]]:
+    """
+    Generate themes using the new two-pass strategy:
+    Pass 1: Generate theme definitions only
+    Pass 2: Assign all codes to the predefined themes
+    
+    Args:
+        df (pd.DataFrame): Original coded DataFrame  
+        enriched_codes (List[Dict[str, Any]]): Enriched codes with frequencies and samples
+        theme_target (int): Target number of themes
+        valid_codes (set): Set of valid codes for verification
+        
+    Returns:
+        Dict[str, Any] or None: Complete themes data with assignments or None if error
+    """
+    try:
+        print(f"🎯 Starting two-pass thematic analysis (target: {theme_target} themes)...")
+        
+        # PASS 1: Generate theme definitions
+        print("📝 Pass 1: Generating theme definitions...")
+        theme_generation_prompt = create_theme_generation_prompt(enriched_codes, theme_target)
+        
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(theme_generation_prompt)
+        
+        # Parse theme generation response
+        response_text = response.text.strip()
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+        response_text = response_text.strip()
+        
+        theme_definitions = json.loads(response_text)
+        
+        # Validate theme definitions structure
+        if not isinstance(theme_definitions, dict) or 'themes' not in theme_definitions:
+            raise ValueError("Theme generation response must contain 'themes' field")
+        
+        predefined_themes = theme_definitions['themes']
+        memo = theme_definitions.get('memo', 'No memo provided')
+        
+        print(f"✅ Pass 1 complete: Generated {len(predefined_themes)} theme definitions")
+        for i, theme in enumerate(predefined_themes, 1):
+            print(f"   {i}. {theme.get('theme_name', f'Theme {i}')}")
+        
+        # PASS 2: Assign all codes to themes
+        print("🔄 Pass 2: Assigning codes to themes...")
+        
+        # Get all unique codes that need assignment
+        all_codes = list(valid_codes)
+        
+        # Process codes in batches if there are many (to avoid token limits)
+        batch_size = 100  # Adjust as needed
+        all_assignments = []
+        
+        for i in range(0, len(all_codes), batch_size):
+            batch_codes = all_codes[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = math.ceil(len(all_codes) / batch_size)
+            
+            print(f"   Assigning batch {batch_num}/{total_batches} ({len(batch_codes)} codes)...")
+            
+            assignment_prompt = create_code_assignment_prompt(predefined_themes, batch_codes)
+            response = model.generate_content(assignment_prompt)
+            
+            # Parse assignment response
+            response_text = response.text.strip()
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
+            batch_assignments = json.loads(response_text)
+            
+            # Validate assignments
+            if not isinstance(batch_assignments, list):
+                raise ValueError("Code assignment response must be a JSON array")
+            
+            all_assignments.extend(batch_assignments)
+        
+        print(f"✅ Pass 2 complete: Assigned {len(all_assignments)} codes")
+        
+        # Build final themes data structure
+        themes_data = {
+            'themes': [],
+            'memo': memo
+        }
+        
+        # Create theme name to assignment mapping
+        theme_names = [theme['theme_name'] for theme in predefined_themes]
+        theme_assignments = {theme_name: [] for theme_name in theme_names}
+        
+        # Group assignments by theme
+        for assignment in all_assignments:
+            code = assignment.get('code', '')
+            assigned_theme = assignment.get('assigned_theme', '')
+            
+            if assigned_theme in theme_assignments:
+                theme_assignments[assigned_theme].append(code)
+            else:
+                print(f"⚠️  Warning: Code '{code}' assigned to unknown theme '{assigned_theme}'")
+        
+        # Build final themes with supporting codes and generate grouping rationales
+        for theme_def in predefined_themes:
+            theme_name = theme_def['theme_name']
+            theme_description = theme_def['theme_description']
+            supporting_codes = theme_assignments.get(theme_name, [])
+            
+            # Generate a grouping rationale based on the theme description and supporting codes
+            if supporting_codes:
+                # Sample first few codes to create rationale
+                sample_codes = supporting_codes[:5]
+                rationale = f"These codes were grouped under '{theme_name}' because they all relate to {theme_description.lower()} Key codes include: {', '.join(sample_codes[:3])}{'...' if len(supporting_codes) > 3 else ''}. This theme captures {len(supporting_codes)} distinct aspects of student feedback in this area."
+            else:
+                rationale = f"This theme '{theme_name}' was defined to capture {theme_description.lower()}, though no codes were assigned to it in this analysis."
+            
+            themes_data['themes'].append({
+                'theme_name': theme_name,
+                'theme_description': theme_description,
+                'supporting_codes': supporting_codes,
+                'grouping_rationale': rationale
+            })
+        
+        print(f"✅ Two-pass analysis complete!")
+        
+        # Report final statistics
+        total_assigned = sum(len(theme['supporting_codes']) for theme in themes_data['themes'])
+        print(f"   Total codes assigned: {total_assigned}/{len(valid_codes)}")
+        
+        for theme in themes_data['themes']:
+            theme_name = theme['theme_name']
+            code_count = len(theme['supporting_codes'])
+            print(f"   - {theme_name}: {code_count} codes")
+        
+        return themes_data
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON parsing error in two-pass analysis: {e}")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error in two-pass theme generation: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+# // ... existing code ... 

@@ -65,7 +65,7 @@ By integrating quantitative survey data with dynamic peer group benchmarking, we
 
 ### F5. Correlation Analysis
 
-**F5.1** The system SHALL identify significant deviations (>1.0 point difference) between section scores and peer group averages.
+**F5.1** The system SHALL identify significant deviations between section scores and peer group averages.
 
 **F5.2** The AI prompt MUST be enhanced to correlate these quantitative deviations with qualitative themes.
 
