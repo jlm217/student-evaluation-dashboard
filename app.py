@@ -814,15 +814,19 @@ async def upload_file_legacy(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    
+    # Get port from environment variable (for Render) or default to 8000 for local development
+    port = int(os.getenv("PORT", 8000))
     
     print("Starting Qualitative Coding Agent v2...")
-    print("Dashboard will be available at: http://localhost:8000")
-    print("API documentation at: http://localhost:8000/docs")
+    print(f"Dashboard will be available at: http://localhost:{port}")
+    print(f"API documentation at: http://localhost:{port}/docs")
     
     uvicorn.run(
         "app:app", 
         host="0.0.0.0", 
-        port=8000, 
-        reload=True,
+        port=port, 
+        reload=False,  # Disable reload in production
         log_level="info"
     ) 
